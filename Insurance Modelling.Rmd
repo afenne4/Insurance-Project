@@ -380,30 +380,31 @@ in agreement with the actual data) but fails to capture the true negatives (a pr
 "Yes" response in agreement with the actual data). All the models make an abundance
 of false positives (a predicted "No" response when the data is a "Yes" response)
 which is quite problematic since I am interested in developing a model that can
-capture the "Yes" responses. 
-```{r collect AUC values}
-lr_auc<-
-    lr_fit_train%>%
-    collect_predictions()%>%
-    roc_curve(Response,.pred_No)%>%
+capture the "Yes" responses. This is likely due to the unbalanced nature of the outcome
+variable. To address this I will implement upsampling, downsampling and smote sampling
+to find a method to address this. I will examine the specificity and ROC values of
+the already fit models to determine which model I will test these different sampling methods with
+first. 
+
+```{r collect specificity values}
+lr_spec<-
+    lr_pred%>%
+    spec(Response,.pred_class)%>%
     mutate(Model="Logistic Regression")
-penalized_lr_auc<-
-    lr_pen_fit%>%
-    collect_predictions(parameters=lr_pen_best)%>%
-    roc_curve(Response,.pred_No)%>%
+lr_pen_spec<-
+    lr_pen_pred%>%
+    spec(Response,.pred_class)%>%
     mutate(Model="Penalized Logistic Regression")
-rf_auc<-
-    RF_fit%>%
-    collect_predictions(parameters=rf_best_fit)%>%
-    roc_curve(Response,.pred_No)%>%
+rf_spec<-
+    rf_pred %>%
+    spec(Response,.pred_class)%>%
     mutate(Model="Random Forest")
 ```
 
-```{r Create ROC curve}
-  bind_rows(lr_auc,penalized_lr_auc,rf_auc) %>% 
-  ggplot(aes(x = 1 - specificity, y = sensitivity, col = Model)) + 
-  geom_path(lwd=1.3,alpha = 0.5) +
-  geom_abline(lty = 1) + 
-  coord_equal() + 
-  scale_color_brewer(type="qual",palette="Dark2")
+```{r Compare Specificity and ROC}
+  bind_rows(lr_spec,lr_pen_spec,rf_spec) %>% 
+  ggplot(aes(x=.estimate,y = Model, fill = as.factor(Model))) + 
+  geom_col()+
+  scale_fill_brewer(type="qual",palette="Dark2")+
+  labs(title="Specificity Across Models",x="Specificity",fill="Models")
 ```
