@@ -437,3 +437,12 @@ auc_plot<-bind_rows(lr_auc,lr_pen_auc,rf_auc) %>%
 
 grid.arrange(spec_plot,auc_plot,nrow=2)
 ```
+
+
+These plots show that the random forest model has both a slightly better AUC and
+specificity than the other models. However given the additional complexity of the
+random forest model, the increase in performance is negligible. Therefore, I will
+be using the logistic regression model to test whether upsampling, downsampling or
+smote sampling will best address the class imbalance.
+
+# Class Imbalance Modelling
