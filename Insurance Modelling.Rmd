@@ -386,7 +386,7 @@ to find a method to address this. I will examine the specificity and ROC values 
 the already fit models to determine which model I will test these different sampling methods with
 first. 
 
-```{r collect specificity values}
+```{r collect specificity and ROC values}
 lr_spec<-
     lr_pred%>%
     spec(Response,.pred_class)%>%
@@ -399,12 +399,41 @@ rf_spec<-
     rf_pred %>%
     spec(Response,.pred_class)%>%
     mutate(Model="Random Forest")
+
+lr_auc<-
+    lr_pred%>%
+    roc_auc(Response,.pred_No)%>%
+    mutate(Model="Logistic Regression")
+lr_pen_auc<-
+    lr_pen_pred%>%
+    roc_auc(Response,.pred_No)%>%
+    mutate(Model="Penalized Regression")
+rf_auc<-
+    rf_pred%>%
+    roc_auc(Response,.pred_No)%>%
+    mutate(Model="Random Forest")
+    
 ```
 
 ```{r Compare Specificity and ROC}
-  bind_rows(lr_spec,lr_pen_spec,rf_spec) %>% 
+spec_plot<-bind_rows(lr_spec,lr_pen_spec,rf_spec) %>% 
   ggplot(aes(x=.estimate,y = Model, fill = as.factor(Model))) + 
   geom_col()+
   scale_fill_brewer(type="qual",palette="Dark2")+
-  labs(title="Specificity Across Models",x="Specificity",fill="Models")
+  labs(title="Specificity Across Models",x="Specificity",fill="Model")+
+  theme(plot.title = element_text(hjust=.5))
+
+auc_plot<-bind_rows(lr_auc,lr_pen_auc,rf_auc) %>% 
+  ggplot(aes(x=.estimate,y = Model, fill = as.factor(Model))) + 
+  geom_col()+
+  scale_fill_brewer(type="qual",palette="Dark2")+
+  labs(title="AUC Across Models",x="AUC",fill="Model")+
+  theme(plot.title = element_text(hjust=.5))+
+  geom_text(
+     size = 3,
+     aes(label = round(.estimate,2), y=Model,x = .estimate + 0.01),
+     vjust = 1, hjust=.15
+  )
+
+grid.arrange(spec_plot,auc_plot,nrow=2)
 ```
