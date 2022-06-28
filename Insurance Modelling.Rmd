@@ -1,0 +1,295 @@
+---
+title: "insurance analysis"
+author: "Alex Fennell"
+output: html_document
+---
+
+
+
+```{r libraries, message=FALSE,warning=FALSE,echo=FALSE}
+library(tidyverse)
+library(tidymodels)
+library(psych)
+library(plotly)
+library(gridExtra)
+#library(doParallel)
+```
+
+```{r read in data}
+data<-read.csv("train.csv")
+test<-read.csv("test.csv")
+```
+
+## Create validation/training data sets
+Since this particular set of data already has a separate csv file for the test data
+set, I will split the training dataset to create a validation set. So as to be able
+to test the models and avoid overfitting.
+
+``` {r data split}
+set.seed(1111)
+split<-validation_split(data,prop=.7,strata=Response)
+train<-training(split)
+valid<-testing(split)
+
+```
+
+#Data Preparation
+Most of the variables are not of the proper type, so I will convert character variables
+to factors and recode some of them to have meaningful levels. I do this for both
+the training and validation datasets.
+
+```{r convert to factor}
+train<-train%>%
+    mutate_if(is.character,as.factor)%>%
+    mutate_at(c("Driving_License","Previously_Insured","Response","Region_Code",
+                "Policy_Sales_Channel"),as.factor)
+
+train$Response<-recode_factor(train$Response, `0` = "Not Interested",
+                              `1` = "Interested")
+train$Vehicle_Damage<-recode_factor(train$Vehicle_Damage,No="No Damage",
+                                    Yes="Damage")
+train$Previously_Insured<-recode_factor(train$Previously_Insured,`0`="No Insurance",
+                                        `1`="Insurance")
+train$Driving_License<-recode_factor(train$Driving_License,`0`="No DL",
+                                     `1`="Has DL")
+
+valid<-valid%>%
+    mutate_if(is.character,as.factor)%>%
+    mutate_at(c("Driving_License","Previously_Insured","Response","Region_Code",
+                "Policy_Sales_Channel"),as.factor)
+
+valid$Response<-recode_factor(valid$Response, `0` = "Not Interested",
+                              `1` = "Interested")
+valid$Vehicle_Damage<-recode_factor(valid$Vehicle_Damage,No="No Damage",
+                                    Yes="Damage")
+valid$Previously_Insured<-recode_factor(valid$Previously_Insured,`0`="No Insurance",
+                                        `1`="Insurance")
+valid$Driving_License<-recode_factor(valid$Driving_License,`0`="No DL",
+                                     `1`="Has DL")
+str(train)
+```
+
+Now that the variables are either numeric or factors I can do a small exploratory
+data analysis.
+
+#Exploratory Data Analysis
+
+```{r data summary}
+summary(train)
+```
+
+This summary shows a few things of interest. First is that the outcome variable
+is quite unbalanced with the majority of individuals being not interested (~88%).
+This can have an effect on model performance, and various sampling techniques (e.g. upsample/smote)
+will be implemented. The Driving_license predictor is also very unbalanced with a tiny
+subset of individuals having no driver's license, thus this predictor may not be very
+useful. There are also a relatively small proportion of individuals in this sample with
+a car age greater than 2 years. The other factor variables seem to have a relatively
+even balance of responses in their different levels. The numeric variables such as 
+age seem to be within a reasonable range.
+
+## Histograms of Numeric Predictors
+```{r univariate numeric analysis,warning=FALSE,message=FALSE}
+agep<-ggplotly(qplot(train$Age))
+premiump<-ggplotly(qplot(train$Annual_Premium))
+vintp<-ggplotly(qplot(train$Vintage))
+
+subplot(agep,premiump,vintp,margin=.06,nrows=1)%>%
+    layout(annotations=list(
+        list(x=.1,y=1.05,text="Age",showarrow = FALSE, xref='paper', yref='paper'),
+        list(x=.5,y=1.05,text="Annual Premium",showarrow = FALSE, xref='paper', yref='paper'),
+        list(x=.95,y=1.05,text="Number of Days with Company",showarrow = FALSE, xref='paper', yref='paper')
+    ))
+```
+
+This plot shows that age has a skewed bimodal distribution with the majority of individuals
+being around 25 years of age, and another concentration of individuals around 40 years of age.
+The annual premium is also skewed but this is likely due to an outlier. As was seen
+in the summary there is a maximum annual premium of 540,165, which is far above the
+median value of 31,662. The number of days with the company is an almost uniformly
+distributed predictor.
+
+## Categorical Bar Charts
+### Insurance Expansion as a function of vehicle age and current Insurance status
+
+```{r categorical variables}
+catp1<-ggplot(data=train,aes(x=Response,fill=Vehicle_Age))+
+    geom_bar(position="dodge")+
+    facet_wrap(~Previously_Insured)
+ggplotly(catp1)
+```
+### Insurance expansion as a function of gender and driver's license possesion
+
+```{r categorical variables 2}
+catp2<-ggplot(data=train,aes(x=Response,fill=Gender))+
+    geom_bar(position="dodge")+
+    facet_wrap(~Driving_License)
+ggplotly(catp2)
+```
+
+### Boxplots of insurance expansion as a function of vehicle age and current insurance status
+```{r boxplots,warning=FALSE}
+bp1<-ggplot(data=train,aes(x=Response,y=Age,fill=Vehicle_Age))+
+    geom_boxplot(position=position_dodge(1))+
+    facet_wrap(~Previously_Insured)
+ggplotly(bp1)%>%
+    layout(boxmode="group")
+
+```
+
+# Model preparation
+
+For this data set I am going to be comparing 3 different models. Since my outcome is
+binary I will start with a basic logistic regression model. Then I will use a penalized
+logistic regression model and finally a random forest model. To prepare the data for modelling
+I first update the role of the ID variable so that it is included in the dataset
+but is not used in the modelling. Then I use step other to clump together categories in 
+factors that have few observations (less than 5% of the data). This will help reduce
+the dimensionality of the data. I scale the data (subtract each value from the mean
+and divide by the SD) to make sure all predictors are on the same scale so large values
+don't incorrectly bias parameter estimates. Then the logistic regression models require the 
+factor predictors to be converted to dummy variables. Finally I use step nsv to remove
+any predictors that are highly unbalanced such as the driver's license predictor. I also
+create cross-validation folds which will be used to evaluate 
+```{r prepare for modelling,warning=FALSE,message=FALSE}
+levels(train$Response)<-c("No","Yes")
+insurance_recipe<-recipe(Response~.,data=train)%>%
+    update_role(id,new_role = "ID")%>%
+    step_other(all_nominal_predictors())%>%
+    step_scale(all_numeric_predictors())%>%
+    step_dummy(all_nominal_predictors())%>%
+    step_nzv(all_predictors(),freq_cut = 99/1)
+
+# create cross validation sets to reduce model variance
+cv_folds<-vfold_cv(train,v=5)
+```
+
+```{r creating model specifications}
+
+lr_mod<-logistic_reg()%>%
+    set_mode("classification")%>%
+    set_engine("glm")
+
+lr_mod_RL<-logistic_reg(penalty=tune(),mixture=tune())%>%
+    set_engine("glmnet")%>%
+    set_mode("classification")
+
+rf_mod<-rand_forest(mtry=tune(),trees=tune())%>%
+    set_mode("classification")%>%
+    set_engine("ranger")
+    
+```
+
+```{r}
+#train_prep<-prep(insurance_recipe)
+#train_bake<-juice(train_prep)
+#lrfit<-glm(Response~.,family='binomial',data=train_bake)
+```
+
+```{r specify tuning grid}
+lr_grid<-grid_regular(penalty(),
+                      mixture(),
+                      levels=7)
+rf_grid<-grid_regular(mtry()%>%range_set(c(1, 10)),
+                      trees()%>%range_set(c(500,2000)),
+                      levels=4)
+```
+
+```{r create workflow}
+insurance_wf<-workflow() %>%
+    add_recipe(insurance_recipe)%>%
+    add_model(lr_mod)
+```
+
+
+# Logistic Regression Model Fit
+```{r Logistic Regression Model fit, cache=TRUE,cache.lazy=FALSE,warning=FALSE,message=FALSE,eval=FALSE}
+lr_fit_train<- insurance_wf%>%
+    fit_resamples(resamples=cv_folds,
+                  metrics = metric_set(
+                      f_meas,
+                      accuracy,
+                      roc_auc),
+                  control = control_resamples(save_pred = TRUE))
+
+#saveRDS(lr_fit_train,"lr_basicfit.rds")
+```
+
+#Ridge/Lasso Regression Model fit-hyperparameter tuning
+
+```{r ridge regression model,cache=TRUE,cache.lazy=FALSE,warning=FALSE,message=FALSE,eval=FALSE}
+insurance_wf<-update_model(insurance_wf,lr_mod_RL)
+lr_fit_RL<-insurance_wf%>%
+    tune_grid(resamples=cv_folds,
+                  grid=lr_grid,
+                      metrics = metric_set(
+                      f_meas,
+                      accuracy,
+                      roc_auc),
+                  control=control_grid(save_pred=TRUE)
+```
+
+```{r read in Ridge/Lasso Regression Model,echo=FALSE}
+lr_fit_RL<-readRDS("lr_Ridge_Lasso_Grid.rds")
+```
+
+```{r Ridge/Lasso Regression hyperparamter evaluation}
+lr_fit_RL %>%
+  collect_metrics() %>%
+  mutate(mixture = factor(mixture)) %>%
+  filter(mean>.8)%>%
+  ggplot(aes(penalty, mean, color = mixture)) +
+  geom_line(size = 1.2, alpha = 0.5) +
+  geom_point(size = 2) +
+  facet_wrap(~ .metric, scales = "free_y", nrow = 2) +
+  scale_x_log10(labels = scales::scientific,limits=c(NA,.05)) +
+  scale_color_viridis_d(begin = .9, end = 0)
+
+```
+
+This set of plots indicates that a mixture value of zero seems to provide the best
+fitting model across all penalty values for accuracy and the F-measure. Mixture values other than
+zero achieve a similar level of accuracy and F-score when the penalty is large. In relation 
+to the AUC value, the model with a mixture a value of 0 does worse until the penalty 
+value is relatively large, and then it is the best. That being said the difference in
+performance between these hyperparameter values is very small, differing by values in
+the ten thousandths for the most part. Since AUC is the main metric of interest, I will
+put more weight on that in making my modelling choice.
+
+```{r}
+lr_RL_best<-select_best(lr_fit_RL,metric = "roc_auc")
+show_best(lr_fit_RL,metric="roc_auc")
+```
+
+
+This function shows that the best model based on AUC is one with a mixture of 1/6
+and a penalty of 1e^-10. 
+```{r random forest model,cache=TRUE,cache.lazy=FALSE,warning=FALSE,message=FALSE}
+set.seed(1234)
+insurance_wf<-update_model(insurance_wf,rf_mod)
+RF_fit<-insurance_wf%>%
+    tune_grid(resamples=cv_folds,
+                  grid=rf_grid,
+                  metrics = metric_set(
+                      f_meas,
+                      accuracy,
+                      roc_auc),
+                  control=control_grid(save_pred = TRUE)
+              )
+#saveRDS(RF_fit,"RF_mod_Grid.rds")
+
+```
+
+
+```{r}
+RF_fit<-readRDS("RF_mod_Grid.rds")
+RF_fit %>%
+  collect_metrics() %>%
+  mutate(mtry = factor(mtry)) %>%
+  ggplot(aes(trees, mean, color = mtry)) +
+  geom_line(size = 1.2, alpha = 0.5) +
+  geom_point(size = 2) +
+  facet_wrap(~ .metric, scales = "free", nrow = 2) +
+  scale_color_viridis_d(begin=.9,end=0)
+
+```
