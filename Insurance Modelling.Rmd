@@ -27,7 +27,7 @@ to test the models and avoid overfitting.
 
 ``` {r data split}
 set.seed(1111)
-split<-validation_split(data,prop=.7,strata=Response)
+split<-initial_split(data,prop=.7,strata=Response)
 train<-training(split)
 valid<-testing(split)
 
