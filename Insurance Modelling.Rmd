@@ -219,7 +219,7 @@ For the model fits I am collecting 3 different metrics F-score, Accuracy and the
 roc_auc score. These are three common metrics with AUC being the metric that I am
 particularly interested in.
 
-```{r Logistic Regression Model fit, cache=TRUE,cache.lazy=FALSE,warning=FALSE,message=FALSE,eval=TRUE}
+```{r Logistic Regression Model fit,warning=FALSE,message=FALSE,eval=FALSE}
 lr_fit_train<- insurance_wf%>%
     fit_resamples(resamples=cv_folds,
                   metrics = metric_set(
@@ -233,7 +233,7 @@ saveRDS(lr_fit_train,"lr_basicfit.rds")
 
 ##Penalized Logistic Regression Model fit-hyperparameter tuning
 
-```{r ridge regression model,cache=TRUE,cache.lazy=FALSE,warning=FALSE,message=FALSE,eval=TRUE}
+```{r ridge regression model,warning=FALSE,message=FALSE,eval=FALSE}
 insurance_wf<-update_model(insurance_wf,lr_mod_RL)
 lr_pen_fit<-insurance_wf%>%
     tune_grid(resamples=cv_folds,
@@ -247,7 +247,7 @@ saveRDS(lr_pen_fit,"lr_pen_fit.rds")
 
 ```
 
-```{r read in Ridge/Lasso Regression Model,echo=FALSE,eval=FALSE}
+```{r read in Ridge/Lasso Regression Model,echo=FALSE}
 lr_pen_fit<-readRDS("lr_pen_fit.rds")
 ```
 
@@ -275,8 +275,8 @@ performance between these hyperparameter values is very small, differing by valu
 the ten thousandths for the most part. Since AUC is the main metric of interest, I will
 put more weight on that in making my modelling choice.
 
-```{r}
-lr_RL_best<-select_best(lr_pen_fit,metric = "roc_auc")
+```{r best penalized logistic regression}
+lr_pen_best<-select_best(lr_pen_fit,metric = "roc_auc")
 show_best(lr_pen_fit,metric="roc_auc")
 ```
 
@@ -289,7 +289,7 @@ going forward.
 Although the random forest model does not require dummy variables I will still use
 the same recipe as the logistic regression for the sake of simplicity.
 
-```{r random forest model,cache=TRUE,cache.lazy=FALSE,warning=FALSE,message=FALSE}
+```{r random forest model,warning=FALSE,message=FALSE,eval=FALSE}
 set.seed(1234)
 insurance_wf<-update_model(insurance_wf,rf_mod)
 RF_fit<-insurance_wf%>%
@@ -307,7 +307,7 @@ saveRDS(RF_fit,"RF_mod_Grid.rds")
 
 ## Random Forest Hyperparameter fit evaluation
 
-```{r load RF model, eval=FALSE,echo=FALSE}
+```{r load RF model, eval=TRUE,echo=FALSE}
 RF_fit<-readRDS("RF_mod_Grid.rds")
 ```
 
@@ -321,4 +321,89 @@ RF_fit %>%
   facet_wrap(~ .metric, scales = "free", nrow = 2) +
   scale_color_viridis_d(begin=.9,end=0)
 
+```
+This plot shows how performance metrics change as a function of the number of trees
+and the number of randomly sampled predictors at each split. Across all metrics an
+mtry value of 7 or 10 performs the worst and is relatively unaffected by the number
+of trees. mtry of 1 and 4 are nearly equivalent for accuracy and the f1-score with the 
+mtry of 1 possibly being slightly better. With AUC, mtry of 4 consistently outperforms
+the other mtry possibilities. The number of trees seems to have little influence
+on the model performance, with a slight increase from 500-1000 trees but above that
+seems to offer no benefit. The table below will show the best parameter combinations
+based on AUC.
+
+```{r RF best model selection}
+rf_best_fit<-select_best(RF_fit,metric="roc_auc")
+show_best(RF_fit,metric="roc_auc")
+```
+
+
+# Model comparison
+we will begin our model comparison by examining the confusion matrices and then
+examine the ROC curve.
+
+```{r collect data for confusion matrices}
+lr_pred<-
+    lr_fit_train%>%
+    collect_predictions()
+
+lr_pen_pred<-
+    lr_fit_train%>%
+    collect_predictions(parameters=lr_pen_best)
+
+rf_pred<-
+    RF_fit%>%
+    collect_predictions(parameters=rf_best_fit)
+```
+
+## Confusion Matrices
+```{r}
+cm_lr<-lr_pred%>%
+    conf_mat(Response,.pred_class)%>%
+    autoplot(type='heatmap')+
+    ggtitle("Logistic Regression")
+cm_lr_pen<-lr_pen_pred%>%
+    conf_mat(Response,.pred_class)%>%
+    autoplot(type='heatmap')+
+    ggtitle("Penalized Regression")
+cm_rf<-rf_pred%>%
+    conf_mat(Response,.pred_class)%>%
+    autoplot(type='heatmap')+
+    ggtitle("Random Forest")
+    
+grid.arrange(cm_lr,cm_lr_pen,cm_rf,ncol=3,heights=c(1,1))
+```
+
+This plot of confusion matrices demonstrates a huge problem across all the models.
+The models are quite good at capturing true positives (a predicted "No" response
+in agreement with the actual data) but fails to capture the true negatives (a predicted
+"Yes" response in agreement with the actual data). All the models make an abundance
+of false positives (a predicted "No" response when the data is a "Yes" response)
+which is quite problematic since I am interested in developing a model that can
+capture the "Yes" responses. 
+```{r collect AUC values}
+lr_auc<-
+    lr_fit_train%>%
+    collect_predictions()%>%
+    roc_curve(Response,.pred_No)%>%
+    mutate(Model="Logistic Regression")
+penalized_lr_auc<-
+    lr_pen_fit%>%
+    collect_predictions(parameters=lr_pen_best)%>%
+    roc_curve(Response,.pred_No)%>%
+    mutate(Model="Penalized Logistic Regression")
+rf_auc<-
+    RF_fit%>%
+    collect_predictions(parameters=rf_best_fit)%>%
+    roc_curve(Response,.pred_No)%>%
+    mutate(Model="Random Forest")
+```
+
+```{r Create ROC curve}
+  bind_rows(lr_auc,penalized_lr_auc,rf_auc) %>% 
+  ggplot(aes(x = 1 - specificity, y = sensitivity, col = Model)) + 
+  geom_path(lwd=1.3,alpha = 0.5) +
+  geom_abline(lty = 1) + 
+  coord_equal() + 
+  scale_color_brewer(type="qual",palette="Dark2")
 ```
