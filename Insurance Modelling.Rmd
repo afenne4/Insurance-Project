@@ -149,8 +149,10 @@ the dimensionality of the data. I scale the data (subtract each value from the m
 and divide by the SD) to make sure all predictors are on the same scale so large values
 don't incorrectly bias parameter estimates. Then the logistic regression models require the 
 factor predictors to be converted to dummy variables. Finally I use step nsv to remove
-any predictors that are highly unbalanced such as the driver's license predictor. I also
-create cross-validation folds which will be used to evaluate 
+any predictors that are highly unbalanced such as the driver's license predictor. Finally, I
+create cross-validation folds which will be used to further reduce the likelihood of
+the models overfitting.
+
 ```{r prepare for modelling,warning=FALSE,message=FALSE}
 levels(train$Response)<-c("No","Yes")
 insurance_recipe<-recipe(Response~.,data=train)%>%
@@ -164,6 +166,7 @@ insurance_recipe<-recipe(Response~.,data=train)%>%
 cv_folds<-vfold_cv(train,v=5)
 ```
 
+## Setting up model engines and hyperparameter tuning
 ```{r creating model specifications}
 
 lr_mod<-logistic_reg()%>%
@@ -186,6 +189,14 @@ rf_mod<-rand_forest(mtry=tune(),trees=tune())%>%
 #lrfit<-glm(Response~.,family='binomial',data=train_bake)
 ```
 
+## Specifying hyperparameter tuning grid
+For the hyperparameter tuning grid I am letting the tune function specify the range
+for the penalized logistic regression. This tidymodels function selects reasonable
+endpoints for each parameter. For example, the mixture parameter has a range from 0-1
+with 0 indicating a fully ridge model, and 1 indicating a fully lasso model. For the
+random forest model I specify the hyperparameter endpoints as these are the values I
+am most interested in testing.
+
 ```{r specify tuning grid}
 lr_grid<-grid_regular(penalty(),
                       mixture(),
@@ -195,15 +206,20 @@ rf_grid<-grid_regular(mtry()%>%range_set(c(1, 10)),
                       levels=4)
 ```
 
+### Making workflow to allow easy interchange of the models
 ```{r create workflow}
 insurance_wf<-workflow() %>%
     add_recipe(insurance_recipe)%>%
     add_model(lr_mod)
 ```
 
+# Model Fitting
+## Logistic Regression Model Fit
+For the model fits I am collecting 3 different metrics F-score, Accuracy and the
+roc_auc score. These are three common metrics with AUC being the metric that I am
+particularly interested in.
 
-# Logistic Regression Model Fit
-```{r Logistic Regression Model fit, cache=TRUE,cache.lazy=FALSE,warning=FALSE,message=FALSE,eval=FALSE}
+```{r Logistic Regression Model fit, cache=TRUE,cache.lazy=FALSE,warning=FALSE,message=FALSE,eval=TRUE}
 lr_fit_train<- insurance_wf%>%
     fit_resamples(resamples=cv_folds,
                   metrics = metric_set(
@@ -212,29 +228,32 @@ lr_fit_train<- insurance_wf%>%
                       roc_auc),
                   control = control_resamples(save_pred = TRUE))
 
-#saveRDS(lr_fit_train,"lr_basicfit.rds")
+saveRDS(lr_fit_train,"lr_basicfit.rds")
 ```
 
-#Ridge/Lasso Regression Model fit-hyperparameter tuning
+##Penalized Logistic Regression Model fit-hyperparameter tuning
 
-```{r ridge regression model,cache=TRUE,cache.lazy=FALSE,warning=FALSE,message=FALSE,eval=FALSE}
+```{r ridge regression model,cache=TRUE,cache.lazy=FALSE,warning=FALSE,message=FALSE,eval=TRUE}
 insurance_wf<-update_model(insurance_wf,lr_mod_RL)
-lr_fit_RL<-insurance_wf%>%
+lr_pen_fit<-insurance_wf%>%
     tune_grid(resamples=cv_folds,
                   grid=lr_grid,
                       metrics = metric_set(
                       f_meas,
                       accuracy,
                       roc_auc),
-                  control=control_grid(save_pred=TRUE)
+                  control=control_grid(save_pred=TRUE))
+saveRDS(lr_pen_fit,"lr_pen_fit.rds")
+
 ```
 
-```{r read in Ridge/Lasso Regression Model,echo=FALSE}
-lr_fit_RL<-readRDS("lr_Ridge_Lasso_Grid.rds")
+```{r read in Ridge/Lasso Regression Model,echo=FALSE,eval=FALSE}
+lr_pen_fit<-readRDS("lr_pen_fit.rds")
 ```
 
+## Penalized Regression Hyperparameter fit evaluation
 ```{r Ridge/Lasso Regression hyperparamter evaluation}
-lr_fit_RL %>%
+lr_pen_fit %>%
   collect_metrics() %>%
   mutate(mixture = factor(mixture)) %>%
   filter(mean>.8)%>%
@@ -257,13 +276,19 @@ the ten thousandths for the most part. Since AUC is the main metric of interest,
 put more weight on that in making my modelling choice.
 
 ```{r}
-lr_RL_best<-select_best(lr_fit_RL,metric = "roc_auc")
-show_best(lr_fit_RL,metric="roc_auc")
+lr_RL_best<-select_best(lr_pen_fit,metric = "roc_auc")
+show_best(lr_pen_fit,metric="roc_auc")
 ```
 
 
 This function shows that the best model based on AUC is one with a mixture of 1/6
-and a penalty of 1e^-10. 
+and a penalty of 1e^-10 which will be the penalized logistic regression model I use
+going forward.
+
+## Random Forest Model Fit
+Although the random forest model does not require dummy variables I will still use
+the same recipe as the logistic regression for the sake of simplicity.
+
 ```{r random forest model,cache=TRUE,cache.lazy=FALSE,warning=FALSE,message=FALSE}
 set.seed(1234)
 insurance_wf<-update_model(insurance_wf,rf_mod)
@@ -276,13 +301,17 @@ RF_fit<-insurance_wf%>%
                       roc_auc),
                   control=control_grid(save_pred = TRUE)
               )
-#saveRDS(RF_fit,"RF_mod_Grid.rds")
+saveRDS(RF_fit,"RF_mod_Grid.rds")
 
 ```
 
+## Random Forest Hyperparameter fit evaluation
 
-```{r}
+```{r load RF model, eval=FALSE,echo=FALSE}
 RF_fit<-readRDS("RF_mod_Grid.rds")
+```
+
+```{r RF model hyperparamter visualization}
 RF_fit %>%
   collect_metrics() %>%
   mutate(mtry = factor(mtry)) %>%
