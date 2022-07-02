@@ -512,7 +512,7 @@ downsamp_lr_fit<-insurance_wf%>%
                       spec,
                       sens,
                       f_meas),
-                  control=control_grid(save_pred=TRUE))
+                  control=control_grid(save_pred=TRUE,parallel_over = "resamples"))
 stopCluster(c1)
 saveRDS(downsamp_lr_fit,"downsamp_model.RDS")
 ```
@@ -531,6 +531,9 @@ smote_lr_fit<-insurance_wf%>%
                       spec,
                       sens,
                       f_meas),
-                  control=control_grid(save_pred=TRUE))
+                  control=control_grid(save_pred=TRUE,parallel_over = "resamples"))
 stopCluster(c1)
 saveRDS(smote_lr_fit,"smote_model.RDS")
+```
+
+
