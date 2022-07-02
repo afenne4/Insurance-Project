@@ -12,7 +12,7 @@ library(tidymodels)
 library(psych)
 library(plotly)
 library(gridExtra)
-#library(doParallel)
+library(doParallel)
 ```
 
 ```{r read in data}
@@ -479,6 +479,10 @@ smote_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
 
 ## Upsample model fit
 ```{r upsample model fit}
+set.seed(1111)
+c1 <- makePSOCKcluster(5)
+registerDoParallel(c1)
+
 upsamp_lr_fit<-insurance_wf%>%
     tune_grid(resamples=cv_folds,
                   grid=upsamp_grid,
@@ -487,7 +491,46 @@ upsamp_lr_fit<-insurance_wf%>%
                       spec,
                       sens,
                       f_meas),
-                  control=control_grid(save_pred=TRUE))
+                  control=control_grid(save_pred=TRUE,parallel_over = "resamples"))
+stopCluster(c1)
+saveRDS(upsamp_lr_fit,"upsamp_model.RDS")
 
 ```
 
+## Downsample model fit
+```{r downsample model fit}
+set.seed(1234)
+c1 <- makePSOCKcluster(5)
+registerDoParallel(c1)
+
+insurance_wf<-insurance_wf%>%update_recipe(downsamp_rec)
+downsamp_lr_fit<-insurance_wf%>%
+    tune_grid(resamples=cv_folds,
+                  grid=downsamp_grid,
+                      metrics = metric_set(
+                      roc_auc,
+                      spec,
+                      sens,
+                      f_meas),
+                  control=control_grid(save_pred=TRUE))
+stopCluster(c1)
+saveRDS(downsamp_lr_fit,"downsamp_model.RDS")
+```
+
+## Smote model fit
+```{r smote model fit}
+set.seed(9876)
+c1 <- makePSOCKcluster(5)
+registerDoParallel(c1)
+insurance_wf<-insurance_wf%>%update_recipe(smote_rec)
+smote_lr_fit<-insurance_wf%>%
+    tune_grid(resamples=cv_folds,
+                  grid=smote_grid,
+                      metrics = metric_set(
+                      roc_auc,
+                      spec,
+                      sens,
+                      f_meas),
+                  control=control_grid(save_pred=TRUE))
+stopCluster(c1)
+saveRDS(smote_lr_fit,"smote_model.RDS")
