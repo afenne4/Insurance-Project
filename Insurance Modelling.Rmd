@@ -467,13 +467,13 @@ insurance_wf<-insurance_wf%>%
 
 ## Creating sampling tuning grids
 ```{r create sampling tuning grids}
-upsamp_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
-                          levels=11)
-downsamp_grid<-grid_regular(under_ratio()%>%range_set(c(.5,1.5)),
-                            levels=11)
-smote_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
-                         neighbors()%>%range_set(c(2,12)),
-                         levels=11)
+upsamp_grid<-grid_regular(over_ratio()%>%range_set(c(.1,2.0)),
+                          levels=20)
+downsamp_grid<-grid_regular(under_ratio()%>%range_set(c(.1,2.0)),
+                            levels=20)
+smote_grid<-grid_regular(over_ratio()%>%range_set(c(.1,2.0)),
+                         neighbors()%>%range_set(c(2,10)),
+                         levels=20)
 
 ```
 
@@ -537,3 +537,44 @@ saveRDS(smote_lr_fit,"smote_model.RDS")
 ```
 
 
+```{r}
+upsamp_lr_fit<-readRDS("upsamp_model.RDS")
+downsamp_lr_fit<-readRDS("downsamp_model.RDS")
+smote_lr_fit<-readRDS("smote_model.RDS")
+```
+
+```{r upsample plot}
+upsamp_lr_fit %>%
+  collect_metrics() %>%
+  mutate(over_ratio = factor(over_ratio),
+         metric=factor(.metric)) %>%
+  ggplot(aes(over_ratio, mean, fill=over_ratio)) +
+  geom_col() +
+  facet_wrap(~ .metric, scales = "free", nrow = 2) +
+  scale_fill_viridis_d(begin=.9,end=0)
+```
+
+
+```{r downsample plot}
+downsamp_lr_fit %>%
+  collect_metrics() %>%
+  mutate(under_ratio = factor(under_ratio),
+         metric=factor(.metric)) %>%
+  ggplot(aes(under_ratio, mean, fill=under_ratio)) +
+  geom_col() +
+  facet_wrap(~ .metric, scales = "free", nrow = 2) +
+  scale_fill_viridis_d(begin=.9,end=0)
+```
+
+
+```{r smote plot}
+smote_lr_fit %>%
+  collect_metrics() %>%
+  mutate(over_ratio = factor(over_ratio),
+         neighbors=factor(neighbors)) %>%
+  ggplot(aes(over_ratio, mean, fill=neighbors)) +
+  geom_line() +
+  geom_point()+
+  facet_wrap(~ .metric, scales = "free", nrow = 2) +
+  scale_fill_viridis_d(begin=.9,end=0)
+```
