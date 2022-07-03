@@ -248,7 +248,10 @@ saveRDS(lr_pen_fit,"lr_pen_fit.rds")
 ```
 
 ```{r read in Ridge/Lasso Regression Model,echo=FALSE}
+lr_fit_train<-readRDS("lr_basicfit.rds")
 lr_pen_fit<-readRDS("lr_pen_fit.rds")
+RF_fit<-readRDS("RF_mod_Grid.rds")
+
 ```
 
 ## Penalized Regression Hyperparameter fit evaluation
@@ -306,10 +309,6 @@ saveRDS(RF_fit,"RF_mod_Grid.rds")
 ```
 
 ## Random Forest Hyperparameter fit evaluation
-
-```{r load RF model, eval=TRUE,echo=FALSE}
-RF_fit<-readRDS("RF_mod_Grid.rds")
-```
 
 ```{r RF model hyperparamter visualization}
 RF_fit %>%
@@ -380,7 +379,7 @@ in agreement with the actual data) but fails to capture the true negatives (a pr
 "Yes" response in agreement with the actual data). All the models make an abundance
 of false positives (a predicted "No" response when the data is a "Yes" response)
 which is quite problematic since I am interested in developing a model that can
-capture the "Yes" responses. This is likely due to the unbalanced nature of the outcome
+capture the "Yes" responses. This is due to the unbalanced nature of the outcome
 variable. To address this I will implement upsampling, downsampling and smote sampling
 to find a method to address this. I will examine the specificity and ROC values of
 the already fit models to determine which model I will test these different sampling methods with
@@ -459,9 +458,7 @@ downsamp_rec<-insurance_recipe%>%
 smote_rec<-insurance_recipe%>%
   step_smote(Response,over_ratio=tune(),neighbors = tune())
 
-insurance_wf<-insurance_wf%>%
-  update_recipe(upsamp_rec)%>%
-  update_model(lr_mod)
+
 ```
 
 
@@ -479,6 +476,9 @@ smote_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
 
 ## Upsample model fit
 ```{r upsample model fit}
+insurance_wf<-insurance_wf%>%
+  update_recipe(upsamp_rec)%>%
+  update_model(lr_mod)
 set.seed(1111)
 c1 <- makePSOCKcluster(5)
 registerDoParallel(c1)
@@ -551,7 +551,7 @@ upsamp_lr_fit %>%
   ggplot(aes(over_ratio, mean, color=over_ratio)) +
   geom_point(size=2) +
   facet_wrap(~ .metric, scales = "free", nrow = 2) +
-  scale_fill_viridis_d(begin=.9,end=0)
+  scale_color_viridis_d()
 ```
 
 
@@ -563,17 +563,85 @@ downsamp_lr_fit %>%
   ggplot(aes(under_ratio, mean, color=under_ratio)) +
   geom_point(size=2) +
   facet_wrap(~ .metric, scales = "free", nrow = 2) +
-  scale_fill_viridis_d(begin=.9,end=0)
+  scale_color_viridis_d()
 ```
 
 
 ```{r smote plot}
 smote_lr_fit %>%
   collect_metrics() %>%
-  mutate(over_ratio = factor(over_ratio)) %>%
-  ggplot(aes(neighbors, mean, color=over_ratio)) +
-  geom_line() +
-  geom_point()+
-  facet_wrap(~ .metric, scales = "free", nrow = 2) +
-  scale_fill_viridis_d(begin=.9,end=0)
+  mutate(neighbors = factor(neighbors)) %>%
+  ggplot(aes(over_ratio, mean, color=neighbors)) +
+  geom_line(alpha=.5) +
+  geom_point(size=2,alpha=.5)+
+  facet_wrap(~ .metric, scales = "free", nrow = 2) 
 ```
+
+
+```{r selecting best models}
+upsamp_best<-select_best(upsamp_lr_fit,metric='spec')
+downsamp_best<-select_best(downsamp_lr_fit,metric='spec')
+smote_best<-select_best(smote_lr_fit,metric='spec')
+
+```
+
+
+```{r collect data for confusion matrices of sampled models}
+upsamp_pred<-
+    upsamp_lr_fit%>%
+    collect_predictions(parameters=upsamp_best)
+
+downsamp_pred<-
+    downsamp_lr_fit%>%
+    collect_predictions(parameters=downsamp_best)
+
+smote_pred<-
+    smote_lr_fit%>%
+    collect_predictions(parameters=smote_best)
+```
+
+## Confusion Matrices
+```{r}
+cm_upsamp<-upsamp_pred%>%
+    conf_mat(Response,.pred_class)%>%
+    autoplot(type='heatmap')+
+    ggtitle("Best Upsample")
+cm_downsamp<-downsamp_pred%>%
+    conf_mat(Response,.pred_class)%>%
+    autoplot(type='heatmap')+
+    ggtitle("Best Downsample")
+cm_smote<-smote_pred%>%
+    conf_mat(Response,.pred_class)%>%
+    autoplot(type='heatmap')+
+    ggtitle("Best Smote")
+    
+grid.arrange(cm_upsamp,cm_downsamp,cm_smote,ncol=3,heights=c(1,1))
+```
+
+
+## ROC curves
+```{r gathering infor for ROC curves}
+up_curve<-upsamp_pred%>%
+  roc_curve(Response,.pred_No)%>%
+  mutate(model="Best Upsample")
+down_curve<-downsamp_pred%>%
+  roc_curve(Response,.pred_No)%>%
+  mutate(model="Best Downsample")
+smote_curve<-smote_pred%>%
+  roc_curve(Response,.pred_No)%>%
+  mutate(model="Best SMOTE")
+
+```
+
+```{r }
+  bind_rows(up_curve,down_curve,smote_curve)%>%
+  ggplot(aes(x = 1 - specificity, y = sensitivity, col = model)) + 
+  geom_path(lwd = 1.5, alpha = 0.8) +
+  geom_abline(lty = 3) + 
+  coord_equal() + 
+  scale_color_viridis_d(option = "plasma", end = .6)
+```
+
+
+
+
