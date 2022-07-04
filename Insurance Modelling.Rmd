@@ -20,6 +20,25 @@ data<-read.csv("train.csv")
 test<-read.csv("test.csv")
 ```
 
+# Data Preparation
+Most of the variables are not of the proper type, so I will convert character variables
+to factors and recode some of them to have meaningful levels.
+
+```{r convert to factor}
+data<-data%>%
+    mutate_if(is.character,as.factor)%>%
+    mutate_at(c("Driving_License","Previously_Insured","Response","Region_Code",
+                "Policy_Sales_Channel"),as.factor)
+
+data$Response<-recode_factor(data$Response, `0` = "No",
+                              `1` = "Yes")
+data$Vehicle_Damage<-recode_factor(data$Vehicle_Damage,No="No Damage",
+                                    Yes="Damage")
+data$Previously_Insured<-recode_factor(data$Previously_Insured,`0`="No Insurance",
+                                        `1`="Insurance")
+data$Driving_License<-recode_factor(data$Driving_License,`0`="No DL",
+                                     `1`="Has DL")
+```
 ## Create validation/training data sets
 Since this particular set of data already has a separate csv file for the test data
 set, I will split the training dataset to create a validation set. So as to be able
@@ -33,44 +52,6 @@ valid<-testing(split)
 
 ```
 
-#Data Preparation
-Most of the variables are not of the proper type, so I will convert character variables
-to factors and recode some of them to have meaningful levels. I do this for both
-the training and validation datasets.
-
-```{r convert to factor}
-train<-train%>%
-    mutate_if(is.character,as.factor)%>%
-    mutate_at(c("Driving_License","Previously_Insured","Response","Region_Code",
-                "Policy_Sales_Channel"),as.factor)
-
-train$Response<-recode_factor(train$Response, `0` = "Not Interested",
-                              `1` = "Interested")
-train$Vehicle_Damage<-recode_factor(train$Vehicle_Damage,No="No Damage",
-                                    Yes="Damage")
-train$Previously_Insured<-recode_factor(train$Previously_Insured,`0`="No Insurance",
-                                        `1`="Insurance")
-train$Driving_License<-recode_factor(train$Driving_License,`0`="No DL",
-                                     `1`="Has DL")
-
-valid<-valid%>%
-    mutate_if(is.character,as.factor)%>%
-    mutate_at(c("Driving_License","Previously_Insured","Response","Region_Code",
-                "Policy_Sales_Channel"),as.factor)
-
-valid$Response<-recode_factor(valid$Response, `0` = "Not Interested",
-                              `1` = "Interested")
-valid$Vehicle_Damage<-recode_factor(valid$Vehicle_Damage,No="No Damage",
-                                    Yes="Damage")
-valid$Previously_Insured<-recode_factor(valid$Previously_Insured,`0`="No Insurance",
-                                        `1`="Insurance")
-valid$Driving_License<-recode_factor(valid$Driving_License,`0`="No DL",
-                                     `1`="Has DL")
-str(train)
-```
-
-Now that the variables are either numeric or factors I can do a small exploratory
-data analysis.
 
 #Exploratory Data Analysis
 
@@ -546,24 +527,29 @@ smote_lr_fit<-readRDS("smote_model.RDS")
 ```{r upsample plot}
 upsamp_lr_fit %>%
   collect_metrics() %>%
-  mutate(over_ratio = factor(over_ratio),
-         metric=factor(.metric)) %>%
-  ggplot(aes(over_ratio, mean, color=over_ratio)) +
+  ggplot(aes(over_ratio, mean,color=mean)) +
   geom_point(size=2) +
+  geom_line()+
   facet_wrap(~ .metric, scales = "free", nrow = 2) +
-  scale_color_viridis_d()
+  scale_color_viridis_c(begin =.9,end=.1)+
+  labs(x="Over Ratio Parameter Values",
+       title = "Upsample Logistic Regression")+
+  theme(plot.title=element_text(hjust=.5))
+
 ```
 
 
 ```{r downsample plot}
 downsamp_lr_fit %>%
   collect_metrics() %>%
-  mutate(under_ratio = factor(under_ratio),
-         metric=factor(.metric)) %>%
-  ggplot(aes(under_ratio, mean, color=under_ratio)) +
+  ggplot(aes(under_ratio, mean, color=mean)) +
   geom_point(size=2) +
+  geom_line()+
   facet_wrap(~ .metric, scales = "free", nrow = 2) +
-  scale_color_viridis_d()
+  scale_color_viridis_c(begin =.9,end=.1)+
+  labs(x="Under Ratio Parameter Values",
+       title = "Downsample Logistic Regression")+
+  theme(plot.title=element_text(hjust=.5))
 ```
 
 
@@ -574,14 +560,18 @@ smote_lr_fit %>%
   ggplot(aes(over_ratio, mean, color=neighbors)) +
   geom_line(alpha=.5) +
   geom_point(size=2,alpha=.5)+
-  facet_wrap(~ .metric, scales = "free", nrow = 2) 
+  facet_wrap(~ .metric, scales = "free", nrow = 2) +
+  labs(x="Over Ratio Parameter Values",
+       title = "Smote Logistic Regression",
+       color="Neighbors Parameter \nValues")+
+  theme(plot.title=element_text(hjust=.5))
 ```
 
 
 ```{r selecting best models}
-upsamp_best<-select_best(upsamp_lr_fit,metric='spec')
-downsamp_best<-select_best(downsamp_lr_fit,metric='spec')
-smote_best<-select_best(smote_lr_fit,metric='spec')
+upsamp_best<-select_best(upsamp_lr_fit,metric='roc_auc')
+downsamp_best<-select_best(downsamp_lr_fit,metric='roc_auc')
+smote_best<-select_best(smote_lr_fit,metric='roc_auc')
 
 ```
 
@@ -618,19 +608,50 @@ cm_smote<-smote_pred%>%
 grid.arrange(cm_upsamp,cm_downsamp,cm_smote,ncol=3,heights=c(1,1))
 ```
 
+## Test models with Validation set
+```{r Fitting model to validation set}
+
+upsamp_final_fit<-insurance_wf%>%
+  update_recipe(upsamp_rec)%>%
+  finalize_workflow(upsamp_best)%>%
+  last_fit(split,metrics=metric_set(roc_auc,
+           spec,
+           sens))
+
+downsamp_final_fit<-insurance_wf%>%
+  update_recipe(downsamp_rec)%>%
+  finalize_workflow(downsamp_best)%>%
+  last_fit(split,metrics=metric_set(roc_auc,
+           spec,
+           sens))
+
+smote_final_fit<-insurance_wf%>%
+  update_recipe(smote_rec)%>%
+  finalize_workflow(smote_best)%>%
+  last_fit(split,metrics=metric_set(roc_auc,
+           spec,
+           sens))
+```
+
+
 
 ## ROC curves
 ```{r gathering infor for ROC curves}
-up_curve<-upsamp_pred%>%
+up_curve<-upsamp_final_fit%>%
+  collect_predictions()%>%
   roc_curve(Response,.pred_No)%>%
-  mutate(model="Best Upsample")
-down_curve<-downsamp_pred%>%
-  roc_curve(Response,.pred_No)%>%
-  mutate(model="Best Downsample")
-smote_curve<-smote_pred%>%
-  roc_curve(Response,.pred_No)%>%
-  mutate(model="Best SMOTE")
+  mutate(model="Best Upsample Model")
 
+down_curve<-downsamp_final_fit%>%
+  collect_predictions()%>%
+  roc_curve(Response,.pred_No)%>%
+  mutate(model="Best Downsample Model")
+
+smote_curve<-smote_final_fit%>%
+  collect_predictions()%>%
+  roc_curve(Response,.pred_No)%>%
+  mutate(model="Best Smote Model")
+  
 ```
 
 ```{r }
