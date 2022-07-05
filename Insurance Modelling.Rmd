@@ -445,13 +445,13 @@ smote_rec<-insurance_recipe%>%
 
 ## Creating sampling tuning grids
 ```{r create sampling tuning grids}
-upsamp_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
+upsamp_grid<-grid_regular(over_ratio()%>%range_set(c(.1,1.1)),
                           levels=11)
-downsamp_grid<-grid_regular(under_ratio()%>%range_set(c(.5,1.5)),
+downsamp_grid<-grid_regular(under_ratio()%>%range_set(c(.9,1.9)),
                             levels=11)
-smote_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
+smote_grid<-grid_regular(over_ratio()%>%range_set(c(.1,1.4)),
                          neighbors()%>%range_set(c(2,12)),
-                         levels=11)
+                         levels=13)
 
 ```
 
