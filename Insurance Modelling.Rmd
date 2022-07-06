@@ -150,7 +150,8 @@ the models overfitting.
 levels(train$Response)<-c("No","Yes")
 insurance_recipe<-recipe(Response~.,data=train)%>%
     update_role(id,new_role = "ID")%>%
-    step_other(all_nominal_predictors())%>%
+    step_novel(all_nominal_predictors())%>%
+    step_other(all_nominal_predictors(),threshold=.01)%>%
     step_scale(all_numeric_predictors())%>%
     step_dummy(all_nominal_predictors())%>%
     step_nzv(all_predictors(),freq_cut = 99/1)
