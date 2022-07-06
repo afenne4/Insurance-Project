@@ -38,6 +38,18 @@ data$Previously_Insured<-recode_factor(data$Previously_Insured,`0`="No Insurance
                                         `1`="Insurance")
 data$Driving_License<-recode_factor(data$Driving_License,`0`="No DL",
                                      `1`="Has DL")
+
+test<-test%>%
+    mutate_if(is.character,as.factor)%>%
+    mutate_at(c("Driving_License","Previously_Insured","Region_Code",
+                "Policy_Sales_Channel"),as.factor)
+
+test$Vehicle_Damage<-recode_factor(test$Vehicle_Damage,No="No Damage",
+                                    Yes="Damage")
+test$Previously_Insured<-recode_factor(test$Previously_Insured,`0`="No Insurance",
+                                        `1`="Insurance")
+test$Driving_License<-recode_factor(test$Driving_License,`0`="No DL",
+                                     `1`="Has DL")
 ```
 ## Create validation/training data sets
 Since this particular set of data already has a separate csv file for the test data
@@ -164,11 +176,6 @@ rf_mod<-rand_forest(mtry=tune(),trees=tune())%>%
     
 ```
 
-```{r}
-#train_prep<-prep(insurance_recipe)
-#train_bake<-juice(train_prep)
-#lrfit<-glm(Response~.,family='binomial',data=train_bake)
-```
 
 ## Specifying hyperparameter tuning grid
 For the hyperparameter tuning grid I am letting the tune function specify the range
@@ -445,13 +452,13 @@ smote_rec<-insurance_recipe%>%
 
 ## Creating sampling tuning grids
 ```{r create sampling tuning grids}
-upsamp_grid<-grid_regular(over_ratio()%>%range_set(c(.1,1.1)),
+upsamp_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
                           levels=11)
-downsamp_grid<-grid_regular(under_ratio()%>%range_set(c(.9,1.9)),
+downsamp_grid<-grid_regular(under_ratio()%>%range_set(c(.5,1.5)),
                             levels=11)
 smote_grid<-grid_regular(over_ratio()%>%range_set(c(.1,1.4)),
                          neighbors()%>%range_set(c(2,12)),
-                         levels=13)
+                         levels=14)
 
 ```
 
@@ -571,8 +578,10 @@ smote_lr_fit %>%
 ```{r selecting best models}
 upsamp_best<-select_best(upsamp_lr_fit,metric='roc_auc')
 downsamp_best<-select_best(downsamp_lr_fit,metric='roc_auc')
-smote_best<-select_best(smote_lr_fit,metric='roc_auc')
-
+smote_best<-smote_lr_fit%>%
+  show_best(metric='roc_auc',n=50)%>%
+  arrange(neighbors)%>%
+  slice(5)
 ```
 
 
@@ -611,21 +620,21 @@ grid.arrange(cm_upsamp,cm_downsamp,cm_smote,ncol=3,heights=c(1,1))
 ## Test models with Validation set
 ```{r Fitting model to validation set}
 
-upsamp_final_fit<-insurance_wf%>%
+upsamp_val_fit<-insurance_wf%>%
   update_recipe(upsamp_rec)%>%
   finalize_workflow(upsamp_best)%>%
   last_fit(split,metrics=metric_set(roc_auc,
            spec,
            sens))
 
-downsamp_final_fit<-insurance_wf%>%
+downsamp_val_fit<-insurance_wf%>%
   update_recipe(downsamp_rec)%>%
   finalize_workflow(downsamp_best)%>%
   last_fit(split,metrics=metric_set(roc_auc,
            spec,
            sens))
 
-smote_final_fit<-insurance_wf%>%
+smote_val_fit<-insurance_wf%>%
   update_recipe(smote_rec)%>%
   finalize_workflow(smote_best)%>%
   last_fit(split,metrics=metric_set(roc_auc,
@@ -637,17 +646,17 @@ smote_final_fit<-insurance_wf%>%
 
 ## ROC curves
 ```{r gathering infor for ROC curves}
-up_curve<-upsamp_final_fit%>%
+up_curve<-upsamp_val_fit%>%
   collect_predictions()%>%
   roc_curve(Response,.pred_No)%>%
   mutate(model="Best Upsample Model")
 
-down_curve<-downsamp_final_fit%>%
+down_curve<-downsamp_val_fit%>%
   collect_predictions()%>%
   roc_curve(Response,.pred_No)%>%
   mutate(model="Best Downsample Model")
 
-smote_curve<-smote_final_fit%>%
+smote_curve<-smote_val_fit%>%
   collect_predictions()%>%
   roc_curve(Response,.pred_No)%>%
   mutate(model="Best Smote Model")
@@ -657,7 +666,7 @@ smote_curve<-smote_final_fit%>%
 ```{r }
   bind_rows(up_curve,down_curve,smote_curve)%>%
   ggplot(aes(x = 1 - specificity, y = sensitivity, col = model)) + 
-  geom_path(lwd = 1.5, alpha = 0.8) +
+  geom_path(lwd = 1, alpha = 0.8) +
   geom_abline(lty = 3) + 
   coord_equal() + 
   scale_color_viridis_d(option = "plasma", end = .6)
@@ -665,4 +674,14 @@ smote_curve<-smote_final_fit%>%
 
 
 
+```{r}
 
+downsamp_final<-insurance_wf%>%
+  update_recipe(downsamp_rec)%>%
+  finalize_workflow(downsamp_best)%>%
+  fit(train)
+
+Response_pred<-predict(downsamp_final,new_data=test)%>%
+  bind_cols(predict(downsamp_final,test,type='prob'))
+
+```
