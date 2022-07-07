@@ -137,7 +137,7 @@ binary I will start with a basic logistic regression model. Then I will use a pe
 logistic regression model and finally a random forest model. To prepare the data for modelling
 I first update the role of the ID variable so that it is included in the dataset
 but is not used in the modelling. Then I use step other to clump together categories in 
-factors that have few observations (less than 5% of the data). This will help reduce
+factors that have few observations (less than 1% of the data). This will help reduce
 the dimensionality of the data. I scale the data (subtract each value from the mean
 and divide by the SD) to make sure all predictors are on the same scale so large values
 don't incorrectly bias parameter estimates. Then the logistic regression models require the 
@@ -150,8 +150,8 @@ the models overfitting.
 levels(train$Response)<-c("No","Yes")
 insurance_recipe<-recipe(Response~.,data=train)%>%
     update_role(id,new_role = "ID")%>%
-    step_novel(all_nominal_predictors())%>%
     step_other(all_nominal_predictors(),threshold=.01)%>%
+    step_novel(all_nominal_predictors())%>%
     step_scale(all_numeric_predictors())%>%
     step_dummy(all_nominal_predictors())%>%
     step_nzv(all_predictors(),freq_cut = 99/1)
@@ -198,7 +198,8 @@ rf_grid<-grid_regular(mtry()%>%range_set(c(1, 10)),
 ### Making workflow to allow easy interchange of the models
 ```{r create workflow}
 insurance_wf<-workflow() %>%
-    add_recipe(insurance_recipe)%>%
+    add_recipe(insurance_recipe,
+               blueprint = hardhat::default_recipe_blueprint(allow_novel_levels = TRUE))%>%
     add_model(lr_mod)
 ```
 
@@ -405,23 +406,19 @@ rf_auc<-
 
 ```{r Compare Specificity and ROC}
 spec_plot<-bind_rows(lr_spec,lr_pen_spec,rf_spec) %>% 
-  ggplot(aes(x=.estimate,y = Model, fill = as.factor(Model))) + 
-  geom_col()+
-  scale_fill_brewer(type="qual",palette="Dark2")+
-  labs(title="Specificity Across Models",x="Specificity",fill="Model")+
+  ggplot(aes(x=.estimate,y = Model, color = as.factor(Model))) + 
+  geom_point(size=3)+
+  scale_color_brewer(type="qual",palette="Dark2")+
+  labs(title="Specificity Across Models",x="Specificity",color="Model")+
   theme(plot.title = element_text(hjust=.5))
 
 auc_plot<-bind_rows(lr_auc,lr_pen_auc,rf_auc) %>% 
-  ggplot(aes(x=.estimate,y = Model, fill = as.factor(Model))) + 
-  geom_col()+
-  scale_fill_brewer(type="qual",palette="Dark2")+
-  labs(title="AUC Across Models",x="AUC",fill="Model")+
-  theme(plot.title = element_text(hjust=.5))+
-  geom_text(
-     size = 3,
-     aes(label = round(.estimate,2), y=Model,x = .estimate + 0.01),
-     vjust = 1, hjust=.15
-  )
+  ggplot(aes(x=.estimate,y = Model, color = as.factor(Model))) + 
+  geom_point(size=3)+
+  scale_color_brewer(type="qual",palette="Dark2")+
+  labs(title="AUC Across Models",x="AUC",color="Model")+
+  theme(plot.title = element_text(hjust=.5))
+
 
 grid.arrange(spec_plot,auc_plot,nrow=2)
 ```
@@ -464,7 +461,7 @@ smote_grid<-grid_regular(over_ratio()%>%range_set(c(.1,1.4)),
 ```
 
 ## Upsample model fit
-```{r upsample model fit}
+```{r upsample model fit,eval=FALSE}
 insurance_wf<-insurance_wf%>%
   update_recipe(upsamp_rec)%>%
   update_model(lr_mod)
@@ -487,7 +484,7 @@ saveRDS(upsamp_lr_fit,"upsamp_model.RDS")
 ```
 
 ## Downsample model fit
-```{r downsample model fit}
+```{r downsample model fit,eval=FALSE}
 set.seed(1234)
 c1 <- makePSOCKcluster(5)
 registerDoParallel(c1)
@@ -507,7 +504,7 @@ saveRDS(downsamp_lr_fit,"downsamp_model.RDS")
 ```
 
 ## Smote model fit
-```{r smote model fit}
+```{r smote model fit,eval=FALSE}
 set.seed(9876)
 c1 <- makePSOCKcluster(5)
 registerDoParallel(c1)
@@ -526,7 +523,7 @@ saveRDS(smote_lr_fit,"smote_model.RDS")
 ```
 
 
-```{r}
+```{r,echo=FALSE}
 upsamp_lr_fit<-readRDS("upsamp_model.RDS")
 downsamp_lr_fit<-readRDS("downsamp_model.RDS")
 smote_lr_fit<-readRDS("smote_model.RDS")
@@ -673,6 +670,9 @@ smote_curve<-smote_val_fit%>%
   scale_color_viridis_d(option = "plasma", end = .6)
 ```
 
+```{r downsample model parameters}
+
+```
 
 
 ```{r}
@@ -682,7 +682,26 @@ downsamp_final<-insurance_wf%>%
   finalize_workflow(downsamp_best)%>%
   fit(train)
 
+ downsamp_parm_plot<-extract_fit_parsnip(downsamp_final)%>%
+   tidy(conf.int=TRUE,exponentiate=TRUE)%>%
+   filter(p.value<.05&!term=="(Intercept)")%>%
+   arrange(estimate)%>%
+   ggplot(aes(x=estimate,y=term,color=term))+
+   geom_point()+
+   geom_errorbarh(aes(xmin=conf.low,xmax=conf.high))+
+   labs(x="Estimate (Odds Ratio)",y="Model Parameter",color="Model Parameter")+
+  theme(legend.position="none")
+
+ ggplotly(downsamp_parm_plot)%>%
+  layout(title=list(text = paste0("Parameter Estimates with 95% Confidence Interval",
+                                    '<br>',
+                                    '<sup>',
+                                     'Best Fitting Downsample Logistic Regression Model (down_ratio = 1.5)','<sup>'),pad = list(b = 50, t = 50)))
+```
+
+```{r fit data to test data set} 
 Response_pred<-predict(downsamp_final,new_data=test)%>%
-  bind_cols(predict(downsamp_final,test,type='prob'))
+  bind_cols(predict(downsamp_final,test,type='prob'),id=test$id)
+  
 
 ```
