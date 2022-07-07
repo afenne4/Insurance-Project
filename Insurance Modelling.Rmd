@@ -152,7 +152,7 @@ insurance_recipe<-recipe(Response~.,data=train)%>%
     update_role(id,new_role = "ID")%>%
     step_other(all_nominal_predictors(),threshold=.01)%>%
     step_novel(all_nominal_predictors())%>%
-    step_scale(all_numeric_predictors())%>%
+    step_normalize(all_numeric_predictors())%>%
     step_dummy(all_nominal_predictors())%>%
     step_nzv(all_predictors(),freq_cut = 99/1)
 
@@ -670,18 +670,15 @@ smote_curve<-smote_val_fit%>%
   scale_color_viridis_d(option = "plasma", end = .6)
 ```
 
-```{r downsample model parameters}
-
-```
-
-
-```{r}
-
+```{r downsample model final fit}
 downsamp_final<-insurance_wf%>%
   update_recipe(downsamp_rec)%>%
   finalize_workflow(downsamp_best)%>%
   fit(train)
+```
 
+
+```{r downsample final model parameters}
  downsamp_parm_plot<-extract_fit_parsnip(downsamp_final)%>%
    tidy(conf.int=TRUE,exponentiate=TRUE)%>%
    filter(p.value<.05&!term=="(Intercept)")%>%
@@ -699,9 +696,12 @@ downsamp_final<-insurance_wf%>%
                                      'Best Fitting Downsample Logistic Regression Model (down_ratio = 1.5)','<sup>'),pad = list(b = 50, t = 50)))
 ```
 
+This plot shows the model parameter estimates for the best fitting downsample logistic regression model.
+Only parameters with a p-value less than .05 are included. Unfortunately the actual values of the 
+Region code and policy sales channel parameters were kept anonymous so I am unable to determine
+the specific sales method or region in which customers reside. The reference level for the policy sales
+channel is 26 while the reference level for region code is 2. 
 ```{r fit data to test data set} 
 Response_pred<-predict(downsamp_final,new_data=test)%>%
   bind_cols(predict(downsamp_final,test,type='prob'),id=test$id)
-  
-
 ```
