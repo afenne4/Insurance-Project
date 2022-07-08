@@ -13,6 +13,7 @@ library(psych)
 library(plotly)
 library(gridExtra)
 library(doParallel)
+library(skimr)
 ```
 
 ```{r read in data}
@@ -68,63 +69,87 @@ valid<-testing(split)
 #Exploratory Data Analysis
 
 ```{r data summary}
-summary(train)
+skim(train)
 ```
 
-This summary shows a few things of interest. First is that the outcome variable
-is quite unbalanced with the majority of individuals being not interested (~88%).
+This summary shows a few things of interest. First is that there are no missing value. Second is that 
+the outcome variable is quite unbalanced with the majority of individuals being not interested (~88%).
 This can have an effect on model performance, and various sampling techniques (e.g. upsample/smote)
 will be implemented. The Driving_license predictor is also very unbalanced with a tiny
 subset of individuals having no driver's license, thus this predictor may not be very
 useful. There are also a relatively small proportion of individuals in this sample with
 a car age greater than 2 years. The other factor variables seem to have a relatively
 even balance of responses in their different levels. The numeric variables such as 
-age seem to be within a reasonable range.
+age seem to be within a reasonable range. Both Region_Code and Policy_Sales_Channel
+have many unique values so some of the less frequent categories may need to be consolidated
+in order to reduce dimensionality and uninformative categories.
 
-## Histograms of Numeric Predictors
+## EDA of Numeric Predictors
 ```{r univariate numeric analysis,warning=FALSE,message=FALSE}
-agep<-ggplotly(qplot(train$Age))
-premiump<-ggplotly(qplot(train$Annual_Premium))
-vintp<-ggplotly(qplot(train$Vintage))
+library(GGally)
 
-subplot(agep,premiump,vintp,margin=.06,nrows=1)%>%
-    layout(annotations=list(
-        list(x=.1,y=1.05,text="Age",showarrow = FALSE, xref='paper', yref='paper'),
-        list(x=.5,y=1.05,text="Annual Premium",showarrow = FALSE, xref='paper', yref='paper'),
-        list(x=.95,y=1.05,text="Number of Days with Company",showarrow = FALSE, xref='paper', yref='paper')
-    ))
+train%>%
+  select(Age,Annual_Premium,Vintage,Response)%>%
+  ggpairs(mapping=aes(color=Response),title="Numeric Predictors as a Function of Response")+
+  theme(plot.title = element_text(hjust=.5))
+
 ```
 
-This plot shows that age has a skewed bimodal distribution with the majority of individuals
+This plot shows that age has a skewed bimodal distribution for "No" respondents with the majority of individuals
 being around 25 years of age, and another concentration of individuals around 40 years of age.
-The annual premium is also skewed but this is likely due to an outlier. As was seen
-in the summary there is a maximum annual premium of 540,165, which is far above the
-median value of 31,662. The number of days with the company is an almost uniformly
-distributed predictor.
+For "Yes" respondents, the distribution is less bimodal with the majority of responses centered
+around customers who are 40 years old. Examining the boxplot of Age shows that 
+the median age of customers responding yes is older than those who responded no.
+The annual premium is also skewed with individuals who responded yes and no seemingly having a similar
+distribution of premiums. As was seen in the summary there is a maximum annual premium of 540,165, 
+which is far above the median value of 31,662. The number of days with the company is an almost uniformly
+distributed predictor with no difference between "Yes" and "No" customers. The correlations among the
+predictors shows that there is little to no relationship among these numeric predictors indicating
+the absence of multicolinearity. This is important to keep in mind as the response variable is
+binary and thus logistic regression is a prime model of interest and one of the model assumptions
+is that there is no multicolinearity.
+ 
 
 ## Categorical Bar Charts
 ### Insurance Expansion as a function of vehicle age and current Insurance status
 
 ```{r categorical variables}
-catp1<-ggplot(data=train,aes(x=Response,fill=Vehicle_Age))+
+catp1<-ggplot(data=train,aes(x=Vehicle_Age,fill=Response))+
     geom_bar(position="dodge")+
+    scale_fill_brewer(type="qual",palette="Dark2")+
     facet_wrap(~Previously_Insured)
 ggplotly(catp1)
+
 ```
+
+This plot indicates that customers with vehicle insurance are not indicating that they
+want to purchase car insurance. This is seems quite intuitive and unsurprising so it is
+good that the data backs this notion up. Among those without car insurance, it seems
+that customers with cars between 1 and 2 years old purchase car insurance much more frequently than customers
+with cars that are less than 1 year or greater than 2 years old.
+
+
 ### Insurance expansion as a function of gender and driver's license possesion
 
 ```{r categorical variables 2}
-catp2<-ggplot(data=train,aes(x=Response,fill=Gender))+
+catp2<-ggplot(data=train,aes(x=Gender,fill=Response))+
     geom_bar(position="dodge")+
-    facet_wrap(~Driving_License)
+    facet_wrap(~Driving_License)+
+    scale_fill_brewer(type="qual",palette="Dark2")
 ggplotly(catp2)
 ```
 
+This plot first and foremost shows that there are not many customers without a Driver's License.
+In addition to this there is not much difference among men and women in terms of responding yes and no.
+Both men and women respond yes and no in similar proportions. Thus posession of a driver's
+license is not a very useful predictor since only one level has the majority of observations.
+
 ### Boxplots of insurance expansion as a function of vehicle age and current insurance status
 ```{r boxplots,warning=FALSE}
-bp1<-ggplot(data=train,aes(x=Response,y=Age,fill=Vehicle_Age))+
+bp1<-ggplot(data=train,aes(x=Vehicle_Age,y=Age,fill=Response))+
     geom_boxplot(position=position_dodge(1))+
-    facet_wrap(~Previously_Insured)
+    facet_wrap(~Previously_Insured)+
+    scale_fill_brewer(type='qual',palette="Dark2")
 ggplotly(bp1)%>%
     layout(boxmode="group")
 
@@ -152,6 +177,7 @@ insurance_recipe<-recipe(Response~.,data=train)%>%
     update_role(id,new_role = "ID")%>%
     step_other(all_nominal_predictors(),threshold=.01)%>%
     step_novel(all_nominal_predictors())%>%
+    step_log(Annual_Premium)%>%
     step_normalize(all_numeric_predictors())%>%
     step_dummy(all_nominal_predictors())%>%
     step_nzv(all_predictors(),freq_cut = 99/1)
@@ -209,7 +235,7 @@ For the model fits I am collecting 3 different metrics F-score, Accuracy and the
 roc_auc score. These are three common metrics with AUC being the metric that I am
 particularly interested in.
 
-```{r Logistic Regression Model fit,warning=FALSE,message=FALSE,eval=FALSE}
+```{r Logistic Regression Model fit,warning=FALSE,message=FALSE,eval=TRUE}
 lr_fit_train<- insurance_wf%>%
     fit_resamples(resamples=cv_folds,
                   metrics = metric_set(
@@ -223,7 +249,7 @@ saveRDS(lr_fit_train,"lr_basicfit.rds")
 
 ##Penalized Logistic Regression Model fit-hyperparameter tuning
 
-```{r ridge regression model,warning=FALSE,message=FALSE,eval=FALSE}
+```{r ridge regression model,warning=FALSE,message=FALSE,eval=TRUE}
 insurance_wf<-update_model(insurance_wf,lr_mod_RL)
 lr_pen_fit<-insurance_wf%>%
     tune_grid(resamples=cv_folds,
@@ -282,7 +308,7 @@ going forward.
 Although the random forest model does not require dummy variables I will still use
 the same recipe as the logistic regression for the sake of simplicity.
 
-```{r random forest model,warning=FALSE,message=FALSE,eval=FALSE}
+```{r random forest model,warning=FALSE,message=FALSE,eval=TRUE}
 set.seed(1234)
 insurance_wf<-update_model(insurance_wf,rf_mod)
 RF_fit<-insurance_wf%>%
@@ -454,14 +480,14 @@ upsamp_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
                           levels=11)
 downsamp_grid<-grid_regular(under_ratio()%>%range_set(c(.5,1.5)),
                             levels=11)
-smote_grid<-grid_regular(over_ratio()%>%range_set(c(.1,1.4)),
+smote_grid<-grid_regular(over_ratio()%>%range_set(c(.3,1.4)),
                          neighbors()%>%range_set(c(2,12)),
-                         levels=14)
+                         levels=12)
 
 ```
 
 ## Upsample model fit
-```{r upsample model fit,eval=FALSE}
+```{r upsample model fit,eval=TRUE}
 insurance_wf<-insurance_wf%>%
   update_recipe(upsamp_rec)%>%
   update_model(lr_mod)
@@ -484,7 +510,7 @@ saveRDS(upsamp_lr_fit,"upsamp_model.RDS")
 ```
 
 ## Downsample model fit
-```{r downsample model fit,eval=FALSE}
+```{r downsample model fit,eval=TRUE}
 set.seed(1234)
 c1 <- makePSOCKcluster(5)
 registerDoParallel(c1)
@@ -504,7 +530,7 @@ saveRDS(downsamp_lr_fit,"downsamp_model.RDS")
 ```
 
 ## Smote model fit
-```{r smote model fit,eval=FALSE}
+```{r smote model fit,eval=TRUE}
 set.seed(9876)
 c1 <- makePSOCKcluster(5)
 registerDoParallel(c1)
@@ -696,11 +722,14 @@ downsamp_final<-insurance_wf%>%
                                      'Best Fitting Downsample Logistic Regression Model (down_ratio = 1.5)','<sup>'),pad = list(b = 50, t = 50)))
 ```
 
-This plot shows the model parameter estimates for the best fitting downsample logistic regression model.
-Only parameters with a p-value less than .05 are included. Unfortunately the actual values of the 
+This plot shows the model coefficient estimates for the best fitting downsample logistic regression model.
+Only coefficients with a p-value less than .05 are included. Unfortunately the actual values of the 
 Region code and policy sales channel parameters were kept anonymous so I am unable to determine
 the specific sales method or region in which customers reside. The reference level for the policy sales
-channel is 26 while the reference level for region code is 2. 
+channel is 26 while the reference level for region code is 2. One of the strongest predictors is
+whether or not a customer has damaged their vehicle in the past. According to this model 
+
+
 ```{r fit data to test data set} 
 Response_pred<-predict(downsamp_final,new_data=test)%>%
   bind_cols(predict(downsamp_final,test,type='prob'),id=test$id)
