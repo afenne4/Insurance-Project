@@ -117,7 +117,11 @@ is that there is no multicolinearity.
 catp1<-ggplot(data=train,aes(x=Vehicle_Age,fill=Response))+
     geom_bar(position="dodge")+
     scale_fill_brewer(type="qual",palette="Dark2")+
-    facet_wrap(~Previously_Insured)
+    facet_wrap(~Previously_Insured)+
+    labs(title="New Car Insurance as a Function of Current Insurance and Vehicle Age",
+         x="Vehicle Age",
+         fill="Purchase New \nInsurance?")+
+    theme(plot.title = element_text(hjust=.5))
 ggplotly(catp1)
 
 ```
@@ -135,30 +139,56 @@ with cars that are less than 1 year or greater than 2 years old.
 catp2<-ggplot(data=train,aes(x=Gender,fill=Response))+
     geom_bar(position="dodge")+
     facet_wrap(~Driving_License)+
-    scale_fill_brewer(type="qual",palette="Dark2")
+    scale_fill_brewer(type="qual",palette="Dark2")+
+      labs(title="New Car Insurance as a Function of Gender and Driver's License (DL)",
+         fill="Purchase New \nInsurance?")+
+    theme(plot.title = element_text(hjust=.5))
 ggplotly(catp2)
 ```
 
 This plot first and foremost shows that there are not many customers without a Driver's License.
 In addition to this there is not much difference among men and women in terms of responding yes and no.
-Both men and women respond yes and no in similar proportions. Thus posession of a driver's
+Both men and women respond yes and no in similar proportions. Thus possession of a driver's
 license is not a very useful predictor since only one level has the majority of observations.
 
 ### Boxplots of insurance expansion as a function of vehicle age and current insurance status
+Since customer Age, Vehicle Age, and current car insurance seem to be useful predictors,
+I want to examine how all of these interact.
+
 ```{r boxplots,warning=FALSE}
 bp1<-ggplot(data=train,aes(x=Vehicle_Age,y=Age,fill=Response))+
     geom_boxplot(position=position_dodge(1))+
     facet_wrap(~Previously_Insured)+
-    scale_fill_brewer(type='qual',palette="Dark2")
+    scale_fill_brewer(type='qual',palette="Dark2")+
+        labs(title="New Car Insurance as a Function of Age, Current Insurance, and Vehicle Age",
+         x="Vehicle Age",
+         fill="Purchase New \nInsurance?")+
+    theme(plot.title = element_text(hjust=.5))
 ggplotly(bp1)%>%
     layout(boxmode="group")
 
 ```
 
+This plot indicates that the age distribution is quite similar among customers who respond
+yes or no to new car insurance purchases across both vehicle age and current car insurance
+status. The main difference in yes and no responses comes with customers who do not currently
+have car insurance and have a vehicle less than one year old. In this case, customers
+who respond yes seem to be older than those who respond no.
+
+## EDA Summary
+Using these plots and summary techniques I was able to glean a few interesting things from the data.
+
+1. There is a large class imbalance in the outcome variable (Response)
+2. Age, Vehicle Age, and Current Car Insurance Status seem to be informative predictors
+3. Multicolinearity among the predictors is not present
+4. Some categorical predictors have either few responses in one category (Driver's License) or have many categories that need to be consolidated (REgion code and Policy Sales Channel)
+
+
 # Model preparation
 
 For this data set I am going to be comparing 3 different models. Since my outcome is
-binary I will start with a basic logistic regression model. Then I will use a penalized
+binary I will start with a basic logistic regression model. This model serves as a great
+starting point in modelling since it is easy to implement, is easy to interpret. Then I will use a penalized
 logistic regression model and finally a random forest model. To prepare the data for modelling
 I first update the role of the ID variable so that it is included in the dataset
 but is not used in the modelling. Then I use step other to clump together categories in 
