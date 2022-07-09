@@ -184,20 +184,57 @@ Using these plots and summary techniques I was able to glean a few interesting t
 4. Some categorical predictors have either few responses in one category (Driver's License) or have many categories that need to be consolidated (REgion code and Policy Sales Channel)
 
 
-# Model preparation
+# Machine Learning Models
 
-For this data set I am going to be comparing 3 different models. Since my outcome is
-binary I will start with a basic logistic regression model. This model serves as a great
-starting point in modelling since it is easy to implement, is easy to interpret. Then I will use a penalized
-logistic regression model and finally a random forest model. To prepare the data for modelling
-I first update the role of the ID variable so that it is included in the dataset
-but is not used in the modelling. Then I use step other to clump together categories in 
-factors that have few observations (less than 1% of the data). This will help reduce
-the dimensionality of the data. I scale the data (subtract each value from the mean
-and divide by the SD) to make sure all predictors are on the same scale so large values
-don't incorrectly bias parameter estimates. Then the logistic regression models require the 
-factor predictors to be converted to dummy variables. Finally I use step nsv to remove
-any predictors that are highly unbalanced such as the driver's license predictor. Finally, I
+For this data set I am going to be comparing 3 different models, logistic regression, penalized logistic
+regression, and random forest. All 3 models can handle this binary classification problem but
+have various pros and cons associated with them.
+
+> Logistic Regression
++Pros
+  *Easy interpretation and implementation
+  *Computationally efficient
+  *Less inclined to overfit low dimensional data
++Cons
+  *Has assumptions that must be met to have reliable parameter estimates
+  *Tends to overfit high dimensional data
+  *Performs best when there is a linear relationship between predictors and logit of outcome variable
+  *Doesn't naturally capture complex relationships among predictors (e.g. interactions must be specified)
+
+> Penalized Logistic Regression
++Pros
+  *Same as logistic regression but can accomodate highly correlated predictors with penalty/mixture parameters
+  *Avoids overfitting with high dimensional data
+  *Acts as an automatic feature selection method
++Cons
+  *Additional hyperparameters require extra model tuning
+  *Results are not as easy to interpret
+  *It can be difficult to understand why certain predictors are penalized
+
+> Random Forest
++Pros
+  *Very powerful predictive capabilities due to ensemble of trees and random selection of predictors
+  *Automatically calculates interactions between predictors
+  *Can examine non-linear relationships between predictors and outcome variable
++Cons
+  *Computationally intensive due to large number of trees being aggregated
+  *Requires hyperparameter tuning that takes additional time
+  *Lack of model interpretability
+  
+# Data Preparation
+To prepare the data for modelling I first update the role of the ID variable so that it 
+is included in the dataset but is not used in the modelling. Then I use step other to clump together 
+categories in factors that have few observations (less than 1% of the data). This will help reduce
+the dimensionality of the data and increase how informative factor levels with few observations are. 
+Step novel prepares the data set so that if the test data set has new category levels not seen in the
+training data set, these additional levels with be stored under a "new" label. This simply helps
+models not experience any warnings or errors when they are applied to the test data set.
+I apply a logorithmic transformation of the annual premium predictor as it is heavily skewed, and 
+I did not want to remove a substantial amount of outliers.  
+I normalize the data (subtract each value from the mean and divide by the SD) to make sure all predictors 
+are on the same scale so large values don't incorrectly bias parameter estimates. Then the logistic 
+regression models require the  factor predictors to be converted to dummy variables. Finally I use step nsv 
+to remove any predictors that are highly unbalanced such as the driver's license predictor. Finally, I
 create cross-validation folds which will be used to further reduce the likelihood of
 the models overfitting.
 
@@ -510,9 +547,9 @@ upsamp_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
                           levels=11)
 downsamp_grid<-grid_regular(under_ratio()%>%range_set(c(.5,1.5)),
                             levels=11)
-smote_grid<-grid_regular(over_ratio()%>%range_set(c(.3,1.4)),
+smote_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
                          neighbors()%>%range_set(c(2,12)),
-                         levels=12)
+                         levels=11)
 
 ```
 
@@ -562,7 +599,7 @@ saveRDS(downsamp_lr_fit,"downsamp_model.RDS")
 ## Smote model fit
 ```{r smote model fit,eval=TRUE}
 set.seed(9876)
-c1 <- makePSOCKcluster(5)
+c1 <- makePSOCKcluster(2)
 registerDoParallel(c1)
 insurance_wf<-insurance_wf%>%update_recipe(smote_rec)
 smote_lr_fit<-insurance_wf%>%
