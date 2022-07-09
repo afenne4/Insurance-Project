@@ -196,7 +196,7 @@ For this data set I am going to be comparing 3 different models, logistic regres
 regression, and random forest. All 3 models can handle this binary classification problem but
 have various pros and cons associated with them.
 
-> Logistic Regression
+### Logistic Regression
 +Pros
   *Easy interpretation and implementation
   *Computationally efficient
@@ -207,7 +207,7 @@ have various pros and cons associated with them.
   *Performs best when there is a linear relationship between predictors and logit of outcome variable
   *Doesn't naturally capture complex relationships among predictors (e.g. interactions must be specified)
 
-> Penalized Logistic Regression
+### Penalized Logistic Regression
 +Pros
   *Same as logistic regression but can accomodate highly correlated predictors with penalty/mixture parameters
   *Avoids overfitting with high dimensional data
@@ -217,7 +217,7 @@ have various pros and cons associated with them.
   *Results are not as easy to interpret
   *It can be difficult to understand why certain predictors are penalized
 
-> Random Forest
+### Random Forest
 +Pros
   *Very powerful predictive capabilities due to ensemble of trees and random selection of predictors
   *Automatically calculates interactions between predictors
@@ -235,12 +235,16 @@ the dimensionality of the data and increase how informative factor levels with f
 Step novel prepares the data set so that if the test data set has new category levels not seen in the
 training data set, these additional levels with be stored under a "new" label. This simply helps
 models not experience any warnings or errors when they are applied to the test data set.
-I apply a logorithmic transformation of the annual premium predictor as it is heavily skewed, and 
+I apply a logarithmic transformation of the annual premium predictor as it is heavily skewed, and 
 I did not want to remove a substantial amount of outliers.  
 I normalize the data (subtract each value from the mean and divide by the SD) to make sure all predictors 
 are on the same scale so large values don't incorrectly bias parameter estimates. Then the logistic 
-regression models require the  factor predictors to be converted to dummy variables. Finally I use step nsv 
-to remove any predictors that are highly unbalanced such as the driver's license predictor. Finally, I
+regression models require the  factor predictors to be converted to dummy variables. Next I use step nsv 
+to remove any predictors that are highly unbalanced such as the driver's license predictor. Using the freq_cut
+argument I specify the ratio of the most frequent level to the second most frequent value. I specify this
+ratio to be 99 to 1 (i.e. out of 100 samples, 99 are for the first class and 1 is for the second class)
+so that a predictor with a ratio greater than this is removed. This is more 
+conservative than the default value as I lean towards keeping data when I can help it. Finally, I
 create cross-validation folds which will be used to further reduce the likelihood of
 the models overfitting.
 
@@ -260,6 +264,27 @@ cv_folds<-vfold_cv(train,v=5)
 ```
 
 ## Setting up model engines and hyperparameter tuning
+
+Using tidymodels for my model specification I set the mode to classification for all models
+(although this is not necessary for logistic regression). For the penalized logistic regression,
+I use the glmnet engine which fits a logistic regression with a mixture of Lasso (L1) and Ridge (L2)
+regularization. Lasso regularization adds a an extra term to the logistic regression loss function
+that multiplies a penalty term (aka alpha) by the absolute value of the model coefficients.
+Ridge regularization on the other hand, adds an extra term that multiplies a penalty term by the 
+squared value of the model coefficients. Ridge regularization is preferable when all coefficients
+should be incorporated into the model as it "pushes" less informative coefficient values close to zero. 
+Lasso regularization forces these less informative coefficient values to be zero. Glmnet has the
+ability to combine the two of these regularization techniques to make an elastic net regularization.
+This results in some coefficients being shrunk towards zero (L2) and others being set to zero (L1).
+There are two hyperparameters that I am going to tune with the penalized model, penalty and mixture.
+  *The penalty parameter (alpha) affects how much coefficient values are minimized
+  *The mixture parameter (lambda) ranges from 0 to 1 with 0 being full Ridge regularization and 1 being full 
+  Lasso regularization 
+  
+For the Random Forest model, I am using the ranger engine as it is an efficient implementation
+of the random forest model. There are two hyperparameters I am tuning for this model mtry and trees.
+  *mtry refers to the number of predictors that the random forest model will consider at each split.
+  *trees refers to how many trees are to be used 
 ```{r creating model specifications}
 
 lr_mod<-logistic_reg()%>%
@@ -280,10 +305,12 @@ rf_mod<-rand_forest(mtry=tune(),trees=tune())%>%
 ## Specifying hyperparameter tuning grid
 For the hyperparameter tuning grid I am letting the tune function specify the range
 for the penalized logistic regression. This tidymodels function selects reasonable
-endpoints for each parameter. For example, the mixture parameter has a range from 0-1
-with 0 indicating a fully ridge model, and 1 indicating a fully lasso model. For the
-random forest model I specify the hyperparameter endpoints as these are the values I
-am most interested in testing.
+endpoints for each parameter. For example, the mixture parameter has a range from 0-1. With 7 levels 
+(including endpoints) for each parameter there will be 49 models compared.
+
+For the random forest model I specify the hyperparameter endpoints as these are values I am interested in
+testing. There are a total of 4 levels across the tuning grid for the random forest with
+all parameter combinations implemented resulting in 16 models.
 
 ```{r specify tuning grid}
 lr_grid<-grid_regular(penalty(),
@@ -295,6 +322,7 @@ rf_grid<-grid_regular(mtry()%>%range_set(c(1, 10)),
 ```
 
 ### Making workflow to allow easy interchange of the models
+
 ```{r create workflow}
 insurance_wf<-workflow() %>%
     add_recipe(insurance_recipe,
@@ -305,10 +333,11 @@ insurance_wf<-workflow() %>%
 # Model Fitting
 ## Logistic Regression Model Fit
 For the model fits I am collecting 3 different metrics F-score, Accuracy and the
-roc_auc score. These are three common metrics with AUC being the metric that I am
-particularly interested in.
+roc_auc score. They are calculated as follows:
 
-```{r Logistic Regression Model fit,warning=FALSE,message=FALSE,eval=TRUE}
+
+
+```{r Logistic Regression Model fit,warning=FALSE,message=FALSE,eval=FALSE}
 lr_fit_train<- insurance_wf%>%
     fit_resamples(resamples=cv_folds,
                   metrics = metric_set(
@@ -322,7 +351,7 @@ saveRDS(lr_fit_train,"lr_basicfit.rds")
 
 ##Penalized Logistic Regression Model fit-hyperparameter tuning
 
-```{r ridge regression model,warning=FALSE,message=FALSE,eval=TRUE}
+```{r ridge regression model,warning=FALSE,message=FALSE,eval=FALSE}
 insurance_wf<-update_model(insurance_wf,lr_mod_RL)
 lr_pen_fit<-insurance_wf%>%
     tune_grid(resamples=cv_folds,
@@ -381,7 +410,7 @@ going forward.
 Although the random forest model does not require dummy variables I will still use
 the same recipe as the logistic regression for the sake of simplicity.
 
-```{r random forest model,warning=FALSE,message=FALSE,eval=TRUE}
+```{r random forest model,warning=FALSE,message=FALSE,eval=FALSE}
 set.seed(1234)
 insurance_wf<-update_model(insurance_wf,rf_mod)
 RF_fit<-insurance_wf%>%
@@ -560,7 +589,7 @@ smote_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
 ```
 
 ## Upsample model fit
-```{r upsample model fit,eval=TRUE}
+```{r upsample model fit,eval=FALSE}
 insurance_wf<-insurance_wf%>%
   update_recipe(upsamp_rec)%>%
   update_model(lr_mod)
@@ -583,7 +612,7 @@ saveRDS(upsamp_lr_fit,"upsamp_model.RDS")
 ```
 
 ## Downsample model fit
-```{r downsample model fit,eval=TRUE}
+```{r downsample model fit,eval=FALSE}
 set.seed(1234)
 c1 <- makePSOCKcluster(5)
 registerDoParallel(c1)
@@ -603,7 +632,7 @@ saveRDS(downsamp_lr_fit,"downsamp_model.RDS")
 ```
 
 ## Smote model fit
-```{r smote model fit,eval=TRUE}
+```{r smote model fit,eval=FALSE}
 set.seed(9876)
 c1 <- makePSOCKcluster(2)
 registerDoParallel(c1)
@@ -622,7 +651,7 @@ saveRDS(smote_lr_fit,"smote_model.RDS")
 ```
 
 
-```{r,echo=FALSE}
+```{r read in sample models,echo=FALSE}
 upsamp_lr_fit<-readRDS("upsamp_model.RDS")
 downsamp_lr_fit<-readRDS("downsamp_model.RDS")
 smote_lr_fit<-readRDS("smote_model.RDS")
@@ -697,7 +726,7 @@ smote_pred<-
 ```
 
 ## Confusion Matrices
-```{r}
+```{r Sample Confusion Matrices}
 cm_upsamp<-upsamp_pred%>%
     conf_mat(Response,.pred_class)%>%
     autoplot(type='heatmap')+
