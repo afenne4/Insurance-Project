@@ -1,7 +1,13 @@
 ---
 title: "insurance analysis"
 author: "Alex Fennell"
-output: html_document
+output: 
+  html_document:
+    toc: true 
+    toc_depth: 2  
+    number_sections: true  
+    theme: united  
+    highlight: tango  
 ---
 
 
