@@ -91,12 +91,12 @@ have many unique values so some of the less frequent categories may need to be c
 in order to reduce dimensionality and uninformative categories.
 
 ## EDA of Numeric Predictors
-```{r univariate numeric analysis,warning=FALSE,message=FALSE}
+```{r univariate numeric analysis,warning=FALSE,message=FALSE,cache=TRUE}
 library(GGally)
 
 train%>%
   select(Age,Annual_Premium,Vintage,Response)%>%
-  ggpairs(mapping=aes(color=Response),title="Numeric Predictors as a Function of Response")+
+  ggpairs(mapping=aes(color=Response,alpha=.5),title="Numeric Predictors as a Function of Response")+
   theme(plot.title = element_text(hjust=.5))
 
 ```
@@ -124,7 +124,7 @@ catp1<-ggplot(data=train,aes(x=Vehicle_Age,fill=Response))+
     geom_bar(position="dodge")+
     scale_fill_brewer(type="qual",palette="Dark2")+
     facet_wrap(~Previously_Insured)+
-    labs(title="New Car Insurance as a Function of Current Insurance and Vehicle Age",
+    labs(title="Car Insurance as a Function of Current Insurance and Vehicle Age",
          x="Vehicle Age",
          fill="Purchase New \nInsurance?")+
     theme(plot.title = element_text(hjust=.5))
@@ -146,7 +146,7 @@ catp2<-ggplot(data=train,aes(x=Gender,fill=Response))+
     geom_bar(position="dodge")+
     facet_wrap(~Driving_License)+
     scale_fill_brewer(type="qual",palette="Dark2")+
-      labs(title="New Car Insurance as a Function of Gender and Driver's License (DL)",
+      labs(title="Car Insurance as a Function of Gender and Driver's License (DL)",
          fill="Purchase New \nInsurance?")+
     theme(plot.title = element_text(hjust=.5))
 ggplotly(catp2)
@@ -166,7 +166,7 @@ bp1<-ggplot(data=train,aes(x=Vehicle_Age,y=Age,fill=Response))+
     geom_boxplot(position=position_dodge(1))+
     facet_wrap(~Previously_Insured)+
     scale_fill_brewer(type='qual',palette="Dark2")+
-        labs(title="New Car Insurance as a Function of Age, Current Insurance, and Vehicle Age",
+        labs(title="Car Insurance as a Function of Age, Current Insurance, and Vehicle Age",
          x="Vehicle Age",
          fill="Purchase New \nInsurance?")+
     theme(plot.title = element_text(hjust=.5))
@@ -187,7 +187,8 @@ Using these plots and summary techniques I was able to glean a few interesting t
 1. There is a large class imbalance in the outcome variable (Response)
 2. Age, Vehicle Age, and Current Car Insurance Status seem to be informative predictors
 3. Multicolinearity among the predictors is not present
-4. Some categorical predictors have either few responses in one category (Driver's License) or have many categories that need to be consolidated (REgion code and Policy Sales Channel)
+4. Some categorical predictors have either few responses in one category (Driver's License) or have many
+   categories that need to be consolidated (REgion code and Policy Sales Channel)
 
 
 # Machine Learning Models
@@ -196,36 +197,40 @@ For this data set I am going to be comparing 3 different models, logistic regres
 regression, and random forest. All 3 models can handle this binary classification problem but
 have various pros and cons associated with them.
 
-### Logistic Regression
-+Pros
-  *Easy interpretation and implementation
-  *Computationally efficient
-  *Less inclined to overfit low dimensional data
-+Cons
-  *Has assumptions that must be met to have reliable parameter estimates
-  *Tends to overfit high dimensional data
-  *Performs best when there is a linear relationship between predictors and logit of outcome variable
-  *Doesn't naturally capture complex relationships among predictors (e.g. interactions must be specified)
+## Logistic Regression
 
-### Penalized Logistic Regression
-+Pros
-  *Same as logistic regression but can accomodate highly correlated predictors with penalty/mixture parameters
-  *Avoids overfitting with high dimensional data
-  *Acts as an automatic feature selection method
-+Cons
-  *Additional hyperparameters require extra model tuning
-  *Results are not as easy to interpret
-  *It can be difficult to understand why certain predictors are penalized
+* Pros
+      + Easy interpretation and implementation
+      + Computationally efficient
+      + Less inclined to overfit low dimensional data
+* Cons
+      + Has assumptions that must be met to have reliable parameter estimates
+      + Tends to overfit high dimensional data
+      + Performs best when there is a linear relationship between predictors and logit of outcome variable
+      + Doesn't naturally capture complex relationships among predictors (e.g. interactions must be specified)
 
-### Random Forest
-+Pros
-  *Very powerful predictive capabilities due to ensemble of trees and random selection of predictors
-  *Automatically calculates interactions between predictors
-  *Can examine non-linear relationships between predictors and outcome variable
-+Cons
-  *Computationally intensive due to large number of trees being aggregated
-  *Requires hyperparameter tuning that takes additional time
-  *Lack of model interpretability
+## Penalized Logistic Regression
+
+* Pros
+      + Same as logistic regression but can accomodate highly correlated predictors with penalty/mixture 
+        parameters
+      + Avoids overfitting with high dimensional data
+      + Acts as an automatic feature selection method
+* Cons
+      + Additional hyperparameters require extra model tuning
+      + Results are not as easy to interpret
+      + It can be difficult to understand why certain predictors are penalized
+
+## Random Forest
+
+* Pros
+      + Very powerful predictive capabilities due to ensemble of trees and random selection of predictors
+      + Automatically calculates interactions between predictors
+      + Can examine non-linear relationships between predictors and outcome variable
+* Cons
+      + Computationally intensive due to large number of trees being aggregated
+      + Requires hyperparameter tuning that takes additional time
+      + Lack of model interpretability
   
 # Data Preparation
 To prepare the data for modelling I first update the role of the ID variable so that it 
@@ -277,14 +282,17 @@ Lasso regularization forces these less informative coefficient values to be zero
 ability to combine the two of these regularization techniques to make an elastic net regularization.
 This results in some coefficients being shrunk towards zero (L2) and others being set to zero (L1).
 There are two hyperparameters that I am going to tune with the penalized model, penalty and mixture.
-  *The penalty parameter (alpha) affects how much coefficient values are minimized
-  *The mixture parameter (lambda) ranges from 0 to 1 with 0 being full Ridge regularization and 1 being full 
+
+* The penalty parameter (alpha) affects how much coefficient values are minimized
+* The mixture parameter (lambda) ranges from 0 to 1 with 0 being full Ridge regularization and 1 being full
   Lasso regularization 
   
 For the Random Forest model, I am using the ranger engine as it is an efficient implementation
 of the random forest model. There are two hyperparameters I am tuning for this model mtry and trees.
-  *mtry refers to the number of predictors that the random forest model will consider at each split.
-  *trees refers to how many trees are to be used 
+
+* mtry refers to the number of predictors that the random forest model will consider at each split.
+* trees refers to how many trees are to be used 
+    
 ```{r creating model specifications}
 
 lr_mod<-logistic_reg()%>%
@@ -333,8 +341,63 @@ insurance_wf<-workflow() %>%
 # Model Fitting
 ## Logistic Regression Model Fit
 For the model fits I am collecting 3 different metrics F-score, Accuracy and the
-roc_auc score. They are calculated as follows:
+roc_auc score. To understand how these metrics are calculated, it is necessary to
+understand confusion matrices. Confusion matrices (like the one below) are a way of displaying the results
+of a classification problem to assess model performance. 
 
+![Example Confusion Matrix](images/conf_mat.png)
+
+In this example the model predictions are presented on the Y-axis and the actual
+data values are presented on the X-axis. The positive and negative values are arbitrary names that 
+correspond to the outcome variable classes (e.g. "No" and "Yes"). There are 4 different classification outcomes:
+
+* True Positive (TP): When the model correctly predicts an observation as Positive
+* True Negative (TN): When the model correctly predicts an observation as Negative
+* False Positive (FP): When the model incorrectly predicts an observation as Positive when 
+  it's true value is Negative (aka type I error)
+* False Negative(FN): When the model incorrectly predicts an observation as Negative when it's true value is
+  Positive (aka type II error)
+  
+With these values, various metrics can be calculated that can be used to evaluate different weakness in a 
+model fit
+
+* Recall (aka Sensitivity or True Positive Rate): This is an important metric when the reduction of false
+  negative is key to the question of interest 
+     $$ \frac{TP}{TP+FN} $$
+  
+* Specificity: This metric is important when correctly categorizing the negative category is of the utmost
+  importance  
+    $$ \frac{TN}{TN+FP}$$
+    
+* Precision: This metric is important when false positives are undesireable and we want to be confident in
+  the positive predicted values 
+$$\frac{TP}{TP+FP}$$
+  
+* Accuracy: The most common metric for classification model performance as it measures how well the model  
+  correctly classifies observations. Not a good metric when class imbalance is a concern.
+$$ \frac{TP+TN}{TP+FN+FP+TN}$$
+    
+* Receiver Operating Characteristic Curve/Area Under the Curve (ROC/AUC): The ROC curve plots the true
+  positive rate against the false positive rate. The false positive rate is calculated as 1-Specificity. 
+  
+  ![Example ROC Curve](images/roc_curve.png)
+  
+  This is a useful measure in classification problems as it can measure model biases at different thresholds.
+  The AUC is a related metric that measures the area under this entire curve to provide an aggregate
+  measure across all classification thresholds. This is the value returned by the roc_auc metric.
+  This can range from 0-1 with 0 indicating the model predictions are all incorrect, and a value of
+  1 indicating the model has perfect classification. 
+
+* F$\beta$-Score (f_meas): This metric is when we are interested in the tradeoff of precision and
+  recall.$$\left(1+\beta^{2}\right)*\frac{Precision*Recall}{\beta^{2}*Precision+Recall}$$ The $\beta$
+  parameter can allow the user to specify the importance of recall over precision. For example, a value of 2
+  indicates that recall is twice as important as precision. If the $\beta$ value is 1 then the F1-score is
+  calculated which is the harmonic mean of precision and recall and is useful when a balance between these two
+  metrics is required. This is of particular interest when false negatives are a concern.
+    $$\frac{2*Precision*Recall}{Precision+Recall}$$
+    
+
+  
 
 
 ```{r Logistic Regression Model fit,warning=FALSE,message=FALSE,eval=FALSE}
@@ -349,7 +412,7 @@ lr_fit_train<- insurance_wf%>%
 saveRDS(lr_fit_train,"lr_basicfit.rds")
 ```
 
-##Penalized Logistic Regression Model fit-hyperparameter tuning
+## Penalized Logistic Regression Model fit-hyperparameter tuning
 
 ```{r ridge regression model,warning=FALSE,message=FALSE,eval=FALSE}
 insurance_wf<-update_model(insurance_wf,lr_mod_RL)
@@ -373,6 +436,8 @@ RF_fit<-readRDS("RF_mod_Grid.rds")
 ```
 
 ## Penalized Regression Hyperparameter fit evaluation
+
+To 
 ```{r Ridge/Lasso Regression hyperparamter evaluation}
 lr_pen_fit %>%
   collect_metrics() %>%
@@ -560,6 +625,7 @@ smote sampling will best address the class imbalance.
 
 # Class Imbalance Modelling
 ## Add in sampling steps to recipes
+
 ```{r update workflows for different sampling techniques}
 library(themis)
 
@@ -577,6 +643,7 @@ smote_rec<-insurance_recipe%>%
 
 
 ## Creating sampling tuning grids
+
 ```{r create sampling tuning grids}
 upsamp_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
                           levels=11)
@@ -588,7 +655,8 @@ smote_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
 
 ```
 
-## Upsample model fit
+## Upsample model 
+
 ```{r upsample model fit,eval=FALSE}
 insurance_wf<-insurance_wf%>%
   update_recipe(upsamp_rec)%>%
@@ -612,6 +680,7 @@ saveRDS(upsamp_lr_fit,"upsamp_model.RDS")
 ```
 
 ## Downsample model fit
+
 ```{r downsample model fit,eval=FALSE}
 set.seed(1234)
 c1 <- makePSOCKcluster(5)
@@ -632,6 +701,7 @@ saveRDS(downsamp_lr_fit,"downsamp_model.RDS")
 ```
 
 ## Smote model fit
+
 ```{r smote model fit,eval=FALSE}
 set.seed(9876)
 c1 <- makePSOCKcluster(2)
@@ -744,7 +814,7 @@ grid.arrange(cm_upsamp,cm_downsamp,cm_smote,ncol=3,heights=c(1,1))
 ```
 
 ## Test models with Validation set
-```{r Fitting model to validation set}
+```{r Fitting model to validation set, cache=TRUE}
 
 upsamp_val_fit<-insurance_wf%>%
   update_recipe(upsamp_rec)%>%
@@ -771,7 +841,7 @@ smote_val_fit<-insurance_wf%>%
 
 
 ## ROC curves
-```{r gathering infor for ROC curves}
+```{r gathering info for ROC curves}
 up_curve<-upsamp_val_fit%>%
   collect_predictions()%>%
   roc_curve(Response,.pred_No)%>%
@@ -789,7 +859,7 @@ smote_curve<-smote_val_fit%>%
   
 ```
 
-```{r }
+```{r ROC curve all sample models}
   bind_rows(up_curve,down_curve,smote_curve)%>%
   ggplot(aes(x = 1 - specificity, y = sensitivity, col = model)) + 
   geom_path(lwd = 1, alpha = 0.8) +
@@ -806,7 +876,7 @@ downsamp_final<-insurance_wf%>%
 ```
 
 
-```{r downsample final model parameters}
+```{r downsample final model parameters, cache=TRUE}
  downsamp_parm_plot<-extract_fit_parsnip(downsamp_final)%>%
    tidy(conf.int=TRUE,exponentiate=TRUE)%>%
    filter(p.value<.05&!term=="(Intercept)")%>%
