@@ -342,7 +342,6 @@ insurance_wf<-workflow() %>%
 ```
 
 # Model Fitting
-## Logistic Regression Model Fit
 For the model fits I am collecting 3 different metrics F-score, Accuracy and the
 roc_auc score. To understand how these metrics are calculated, it is necessary to
 understand confusion matrices. Confusion matrices (like the one below) are a way of displaying the results
@@ -399,9 +398,7 @@ $$ \frac{TP+TN}{TP+FN+FP+TN}$$
   metrics is required. This is of particular interest when false negatives are a concern.
     $$\frac{2*Precision*Recall}{Precision+Recall}$$
     
-
-  
-
+## Logistic Regression Model Fit
 
 ```{r Logistic Regression Model fit,warning=FALSE,message=FALSE,eval=FALSE}
 lr_fit_train<- insurance_wf%>%
@@ -438,9 +435,8 @@ RF_fit<-readRDS("RF_mod_Grid.rds")
 
 ```
 
-## Penalized Regression Hyperparameter fit evaluation
+## Penalized Regression Hyperparameter fit visualization
 
-To 
 ```{r Ridge/Lasso Regression hyperparamter evaluation}
 lr_pen_fit %>%
   collect_metrics() %>%
@@ -451,7 +447,9 @@ lr_pen_fit %>%
   geom_point(size = 2) +
   facet_wrap(~ .metric, scales = "free_y", nrow = 2) +
   scale_x_log10(labels = scales::scientific,limits=c(NA,.05)) +
-  scale_color_viridis_d(begin = .9, end = 0)
+  scale_color_viridis_d(begin = .9, end = 0)+
+  ggtitle("Penalized Logistic Regression Hyperparameters")+
+  theme(plot.title = element_text(hjust=.5))
 
 ```
 
@@ -494,7 +492,7 @@ saveRDS(RF_fit,"RF_mod_Grid.rds")
 
 ```
 
-## Random Forest Hyperparameter fit evaluation
+## Random Forest Hyperparameter fit visualization
 
 ```{r RF model hyperparamter visualization}
 RF_fit %>%
@@ -504,7 +502,9 @@ RF_fit %>%
   geom_line(size = 1.2, alpha = 0.5) +
   geom_point(size = 2) +
   facet_wrap(~ .metric, scales = "free", nrow = 2) +
-  scale_color_viridis_d(begin=.9,end=0)
+  scale_color_viridis_d(begin=.9,end=0)+
+  ggtitle("Random Forest Hyperparameters")+
+  theme(plot.title = element_text(hjust=.5))
 
 ```
 This plot shows how performance metrics change as a function of the number of trees
@@ -524,8 +524,7 @@ show_best(RF_fit,metric="roc_auc")
 
 
 # Model comparison
-we will begin our model comparison by examining the confusion matrices and then
-examine the ROC curve.
+For the model I examine the confusion matrices and the ROC curve.
 
 ```{r collect data for confusion matrices}
 lr_pred<-
@@ -542,7 +541,7 @@ rf_pred<-
 ```
 
 ## Confusion Matrices
-```{r}
+```{r Confusion Matrices original models}
 cm_lr<-lr_pred%>%
     conf_mat(Response,.pred_class)%>%
     autoplot(type='heatmap')+
@@ -566,7 +565,8 @@ in agreement with the actual data) but fails to capture the true negatives (a pr
 of false positives (a predicted "No" response when the data is a "Yes" response)
 which is quite problematic since I am interested in developing a model that can
 capture the "Yes" responses. This is due to the unbalanced nature of the outcome
-variable. To address this I will implement upsampling, downsampling and smote sampling
+variable. Even with a more powerful model technique such as random forest, there is still
+this issue present. To address this I will implement upsampling, downsampling and smote sampling
 to find a method to address this. I will examine the specificity and ROC values of
 the already fit models to determine which model I will test these different sampling methods with
 first. 
@@ -600,6 +600,8 @@ rf_auc<-
     
 ```
 
+## Compare Specificity and ROC
+
 ```{r Compare Specificity and ROC}
 spec_plot<-bind_rows(lr_spec,lr_pen_spec,rf_spec) %>% 
   ggplot(aes(x=.estimate,y = Model, color = as.factor(Model))) + 
@@ -620,13 +622,19 @@ grid.arrange(spec_plot,auc_plot,nrow=2)
 ```
 
 
-These plots show that the random forest model has both a slightly better AUC and
-specificity than the other models. However given the additional complexity of the
-random forest model, the increase in performance is negligible. Therefore, I will
-be using the logistic regression model to test whether upsampling, downsampling or
-smote sampling will best address the class imbalance.
+These plots show that the random forest model has both a slightly better AUC, but slightly worse
+specificity than the other models. Given there is not much of a performance improvement with 
+the random forest model, I will be proceeding in my analyses with the base logistic regression model to test
+whether upsampling, downsampling or smote sampling will best address the class imbalance.
+Logistic regression also has the added benefit of being more interpretable, which
+will make it easier to implement business decisions based on the model.
 
 # Class Imbalance Modelling
+To address the class imbalance I will be using 3 sampling techniques. I will briefly
+describe how each of these methods works.
+
+1. Upsampling:
+
 ## Add in sampling steps to recipes
 
 ```{r update workflows for different sampling techniques}
