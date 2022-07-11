@@ -97,7 +97,10 @@ library(GGally)
 train%>%
   select(Age,Annual_Premium,Vintage,Response)%>%
   ggpairs(mapping=aes(color=Response,alpha=.5),title="Numeric Predictors as a Function of Response")+
-  theme(plot.title = element_text(hjust=.5))
+  theme(plot.title = element_text(hjust=.5))+
+  scale_color_brewer(type="qual",palette="Dark2")+
+  scale_fill_brewer(type="qual",palette="Dark2")
+
 
 ```
 
