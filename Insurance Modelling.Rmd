@@ -72,7 +72,7 @@ valid<-testing(split)
 ```
 
 
-#Exploratory Data Analysis
+# Exploratory Data Analysis
 
 ```{r data summary}
 skim(train)
@@ -678,8 +678,10 @@ upsamp_lr_fit<-insurance_wf%>%
                       f_meas),
                   control=control_grid(save_pred=TRUE,parallel_over = "resamples"))
 stopCluster(c1)
-saveRDS(upsamp_lr_fit,"upsamp_model.RDS")
+```
 
+```{r save upsample model save, eval=FALSE,echo=FALSE}
+saveRDS(upsamp_lr_fit,"upsamp_model.RDS")
 ```
 
 ## Downsample model fit
@@ -700,6 +702,9 @@ downsamp_lr_fit<-insurance_wf%>%
                       f_meas),
                   control=control_grid(save_pred=TRUE,parallel_over = "resamples"))
 stopCluster(c1)
+```
+
+```{r downsample model save, eval=FALSE,echo=FALSE}
 saveRDS(downsamp_lr_fit,"downsamp_model.RDS")
 ```
 
@@ -720,6 +725,9 @@ smote_lr_fit<-insurance_wf%>%
                       f_meas),
                   control=control_grid(save_pred=TRUE,parallel_over = "resamples"))
 stopCluster(c1)
+```
+
+```{r smote sample model save,eval=FALSE,echo=FALSE}
 saveRDS(smote_lr_fit,"smote_model.RDS")
 ```
 
@@ -729,6 +737,9 @@ upsamp_lr_fit<-readRDS("upsamp_model.RDS")
 downsamp_lr_fit<-readRDS("downsamp_model.RDS")
 smote_lr_fit<-readRDS("smote_model.RDS")
 ```
+# Model Evaluation
+
+## Upsample Model
 
 ```{r upsample plot}
 upsamp_lr_fit %>%
@@ -744,7 +755,7 @@ upsamp_lr_fit %>%
 
 ```
 
-
+## Downsample Model
 ```{r downsample plot}
 downsamp_lr_fit %>%
   collect_metrics() %>%
@@ -758,7 +769,7 @@ downsamp_lr_fit %>%
   theme(plot.title=element_text(hjust=.5))
 ```
 
-
+## Smote Model
 ```{r smote plot}
 smote_lr_fit %>%
   collect_metrics() %>%
@@ -777,10 +788,7 @@ smote_lr_fit %>%
 ```{r selecting best models}
 upsamp_best<-select_best(upsamp_lr_fit,metric='roc_auc')
 downsamp_best<-select_best(downsamp_lr_fit,metric='roc_auc')
-smote_best<-smote_lr_fit%>%
-  show_best(metric='roc_auc',n=50)%>%
-  arrange(neighbors)%>%
-  slice(5)
+smote_best<-select_best(smote_lr_fit,metric='roc_auc')
 ```
 
 
@@ -816,7 +824,7 @@ cm_smote<-smote_pred%>%
 grid.arrange(cm_upsamp,cm_downsamp,cm_smote,ncol=3,heights=c(1,1))
 ```
 
-## Test models with Validation set
+# Test models with Validation set
 ```{r Fitting model to validation set, cache=TRUE}
 
 upsamp_val_fit<-insurance_wf%>%
@@ -871,6 +879,7 @@ smote_curve<-smote_val_fit%>%
   scale_color_viridis_d(option = "plasma", end = .6)
 ```
 
+# Final Model Fit
 ```{r downsample model final fit}
 downsamp_final<-insurance_wf%>%
   update_recipe(downsamp_rec)%>%
@@ -878,7 +887,7 @@ downsamp_final<-insurance_wf%>%
   fit(train)
 ```
 
-
+## Model Parameters
 ```{r downsample final model parameters, cache=TRUE}
  downsamp_parm_plot<-extract_fit_parsnip(downsamp_final)%>%
    tidy(conf.int=TRUE,exponentiate=TRUE)%>%
@@ -891,10 +900,7 @@ downsamp_final<-insurance_wf%>%
   theme(legend.position="none")
 
  ggplotly(downsamp_parm_plot)%>%
-  layout(title=list(text = paste0("Parameter Estimates with 95% Confidence Interval",
-                                    '<br>',
-                                    '<sup>',
-                                     'Best Fitting Downsample Logistic Regression Model (down_ratio = 1.5)','<sup>'),pad = list(b = 50, t = 50)))
+  layout(title=list(text = "Parameter Estimates with 95% Confidence Interval"))
 ```
 
 This plot shows the model coefficient estimates for the best fitting downsample logistic regression model.
