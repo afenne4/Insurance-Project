@@ -9,7 +9,7 @@ output:
     theme: united  
     highlight: tango  
 ---
-
+# Synopsis
 
 
 ```{r libraries, message=FALSE,warning=FALSE,echo=FALSE}
@@ -858,6 +858,8 @@ smote_pred<-
 ```
 
 ## Confusion Matrices for sampling methods models
+Using the parameters from the best fitting models I can now evaluate the model fit
+using a confusion matrix
 ```{r Sample Confusion Matrices}
 cm_upsamp<-upsamp_pred%>%
     conf_mat(Response,.pred_class)%>%
@@ -875,7 +877,20 @@ cm_smote<-smote_pred%>%
 grid.arrange(cm_upsamp,cm_downsamp,cm_smote,ncol=3,heights=c(1,1))
 ```
 
+These confusion matrices show that all the sampling techniques result in fewer false negatives
+and many more false positives than with the previous models without sampling techniques implemented.
+These sampling models do make a lot of correct predictions that a customer will purchase more insurance,
+which is the result I was aiming for. Considering this is what I want the model to accomplish,
+this seems to be a vast improvement over the previous methods. The upsample model and smote model
+have similar performance, while the downsample model has more true negatives and false positives.
+
 # Test models with Validation set
+
+Now that I have determined the sample techniques offer an improved fit, I will apply
+the best fitting models to the validation set to assess the model performance on data
+they were not trained on. This is the true test as a model needs to be able to perform
+well on unobserved data in order to be useful in practice.
+
 ```{r Fitting model to validation set, cache=TRUE}
 
 upsamp_val_fit<-insurance_wf%>%
@@ -907,33 +922,52 @@ smote_val_fit<-insurance_wf%>%
 up_curve<-upsamp_val_fit%>%
   collect_predictions()%>%
   roc_curve(Response,.pred_No)%>%
-  mutate(model="Best Upsample Model")
+  mutate(Model="Best Upsample Model")
 
 down_curve<-downsamp_val_fit%>%
   collect_predictions()%>%
   roc_curve(Response,.pred_No)%>%
-  mutate(model="Best Downsample Model")
+  mutate(Model="Best Downsample Model")
 
 smote_curve<-smote_val_fit%>%
   collect_predictions()%>%
   roc_curve(Response,.pred_No)%>%
-  mutate(model="Best Smote Model")
+  mutate(Model="Best Smote Model")
   
 ```
 
 ```{r ROC curve all sample models}
   bind_rows(up_curve,down_curve,smote_curve)%>%
-  ggplot(aes(x = 1 - specificity, y = sensitivity, col = model, lty=model)) + 
+  ggplot(aes(x = 1 - specificity, y = sensitivity, col = Model, lty=Model)) + 
   geom_path(lwd = 1, alpha = 0.8) +
   geom_abline(lty = 3) + 
   coord_equal() + 
-  scale_color_viridis_d(option = "plasma", end = .6)
+  scale_color_viridis_d(option = "plasma", end = .8)+
+  labs(title="ROC Curve All Sampling Models",
+       x="False Positive Rate (1-Specificity)",
+       y="True Positive Rate (Sensitivity)")+
+  theme(plot.title = element_text(hjust=.5))
 ```
-##Confusion matrices based on best decision cutoff
 
-```{r}
-# This finds the most balanced decision threshold by maximizing the true positive rate (specificity) minus # the false positive rate (1-sensitivity)
-up_curve_cut<- up_curve$.threshold[which.max(sqrt(up_curve$sensitivity^2-(up_curve$specificity)^2))]
+This ROC curve displays the tradeoff of the true positive rate (sensitivity) to the
+false positive rate (1-specificity). The three sampling techniques offer incredibly
+similar performance as can be seen with the lines overlapping.
+
+## Confusion matrices based on best decision cutoff
+Since logistic regression provides the probabilities that an observation belongs to
+one class or another, the threshold at which an observation is classified into one class
+or another (e.g. No vs. Yes) has much influence on the model performance. The default
+value is .5, but this does not lead to the optimal tradeoff between the true positive rate
+and the false positive rate as can be seen in the ROC curve above. Different thresholds can be
+chosen depending on whether the true positive rate or false positive rate is of more interest.
+For my purposes I am looking for an equal balance between the two and thus I will be determining
+which threshold maximizes the true positive rate and the false positive rate. Different
+methods can be done to achieve this, but the one I have implemented is the simplest and
+most straightforward.
+
+```{r calculate new decision cutoff and create confusion matrix}
+# This finds the most balanced decision threshold by maximizing the true positive rate (sensitivity) minus # the false positive rate (1-specificity)
+up_curve_cut<- up_curve$.threshold[which.max(up_curve$sensitivity-(1-up_curve$specificity))]
 down_curve_cut<- down_curve$.threshold[which.max(down_curve$sensitivity-(1-down_curve$specificity))]
 smote_curve_cut<- smote_curve$.threshold[which.max(smote_curve$sensitivity-(1-smote_curve$specificity))]
 
@@ -961,9 +995,20 @@ grid.arrange(cm_upsamp,cm_downsamp,cm_smote,ncol=3,heights=c(1,1))
 
 ```
 
+The optimal threshold for every model results in very similar performance. This is not
+surprising considering the ROC curves were overlapping. In relation to the previous confusion matrix
+on the training data, the models have a better rate of true negatives, more false positives,
+and fewer false negatives. This clearly is not the best model, but it offers a significant
+improvement over the initial efforts and can serve as a starting point in modelling efforts.
 
 
 # Final Model Fit
+For the final fit, I am using the downsample model since the data set is very large and
+it offers similar performance to the other sampling techniques. Using this I will interpret
+the model coefficients to guide further decisions on how to divert resources to increase
+the amount of customers that expand their insurance coverage. Coefficients in logistic regression
+are given in terms of the log odds. However by exponentiating the coefficients I can 
+convert this to the odds which is much easier to interpret.
 ```{r downsample model final fit}
 downsamp_final<-insurance_wf%>%
   update_recipe(downsamp_rec)%>%
@@ -979,6 +1024,7 @@ downsamp_final<-insurance_wf%>%
    arrange(estimate)%>%
    ggplot(aes(x=estimate,y=term,color=term))+
    geom_point()+
+   geom_vline(xintercept=1)+
    geom_errorbarh(aes(xmin=conf.low,xmax=conf.high))+
    labs(x="Estimate (Odds Ratio)",y="Model Parameter",title="Parameter Estimates with 95% Confidence Interval")+
    theme(legend.position="none")
@@ -987,14 +1033,34 @@ downsamp_final<-insurance_wf%>%
 ```
 
 This plot shows the model coefficient estimates for the best fitting downsample logistic regression model.
-Only coefficients with a p-value less than .05 are included. Unfortunately the actual values of the 
+Only coefficients with a p-value less than .05 are included. The verticle black line indicates
+an odds ratio of 1 meaning the predictor is not informative. Unfortunately the actual values of the 
 Region code and policy sales channel parameters were kept anonymous so I am unable to determine
 the specific sales method or region in which customers reside. The reference level for the policy sales
-channel is 26 while the reference level for region code is 2. One of the strongest predictors is
-whether or not a customer has damaged their vehicle in the past. According to this model 
+channel is 26 while the reference level for region code is 2. 
 
+One of the strongest predictors is whether or not a customer has damaged their vehicle in the past. 
+According to this model, the odds of a customer who has damaged their vehicle in the past to 
+purchase new car insurance is 7 times higher than a customer who has not damaged their vehicle 
+in the past. On  the other end of the spectrum,if a customer already has vehicle insurance, they 
+are incredibly unlikely to be interested in purchasing car insurance compared to customer without 
+vehicle insurance. The way in which a customer is contacted for car insurance also plays a large role
+in whether they are interested in purchasing new car insurance or not. In particular, sales channels 160, 
+152, and 151 result in a customer being much less likely to purchase car insurance compared to sales 
+channel 26. Thus, these sales techniques are having a detrimental impact and need to be abandoned or 
+changed in some way. For age there is a negative relationship in which the odds of purchasing new car 
+insurance decreases as customers age. Thus focusing marketing efforts on younger customers is a better use 
+of resources. Most regions included in the predictor set increase the likelihood of purchasing new car 
+insurance when compared to region 2. In particular, the odds of a customer in region 18 being interested 
+in purchasing new car insurance is 2.5 times higher than a customer in region 2. Vehicle age also has an 
+impact on whether a customer wants to purchase new car insurance. Customers with vehicles older than 1 year 
+old have greater odds of purchasing new car insurance than customers with vehicles less than 1 year old.
+Gender and annual premium have a comparatively negligible impact on the odds of a customer 
+deciding to purchse new car insurance.
 
-```{r fit data to test data set,warning=FALSE,message=FALSE} 
+# Conclusion
+
+```{r fit data to test data set,warning=FALSE,message=FALSE,echo=FALSE} 
 Response_pred<-predict(downsamp_final,new_data=test)%>%
   bind_cols(predict(downsamp_final,test,type='prob'),id=test$id)
 ```
