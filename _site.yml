@@ -1,0 +1,14 @@
+  name: "Imbalanced Insurance Classification"
+  output_dir: "docs"
+  navbar:
+    title: "Imbalanced Insurance Classification"
+    left:
+    - text: "Navigation"
+      href: index.html
+    - text: "README"
+      href: README.html
+    - text: "Insurance Modelling"
+      href: Insurance-Modelling.html
+  output:
+    html_document:
+      theme: cosmo
