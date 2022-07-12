@@ -450,7 +450,7 @@ RF_fit<-readRDS("RF_mod_Grid.rds")
 
 ## Penalized Regression Hyperparameter fit visualization
 
-```{r Ridge/Lasso Regression hyperparamter evaluation}
+```{r Ridge/Lasso Regression hyperparamter evaluation, warning =FALSE}
 lr_pen_fit %>%
   collect_metrics() %>%
   mutate(mixture = factor(mixture)) %>%
@@ -829,6 +829,7 @@ This plot shows the opposite pattern as the upsample model. In this plot, F1-sco
 AUC, and sensitivity increase and the specificity decreases as the *under_ratio* parameter
 increases. An *under_ratio* value of 1.5 seems to offer the best model performance.
 ## Smote Model
+
 ```{r smote plot}
 smote_lr_fit %>%
   collect_metrics() %>%
@@ -979,7 +980,8 @@ methods can be done to achieve this, but the one I have implemented is the simpl
 most straightforward.
 
 ```{r calculate new decision cutoff and create confusion matrix}
-# This finds the most balanced decision threshold by maximizing the true positive rate (sensitivity) minus # the false positive rate (1-specificity)
+# This finds the most balanced decision threshold by maximizing the true positive rate 
+#(sensitivity) minus the false positive rate (1-specificity)
 up_curve_cut<- up_curve$.threshold[which.max(up_curve$sensitivity-(1-up_curve$specificity))]
 down_curve_cut<- down_curve$.threshold[which.max(down_curve$sensitivity-(1-down_curve$specificity))]
 smote_curve_cut<- smote_curve$.threshold[which.max(smote_curve$sensitivity-(1-smote_curve$specificity))]
@@ -1030,7 +1032,7 @@ downsamp_final<-insurance_wf%>%
 ```
 
 ## Downsample Best Fitting Model Parameters
-```{r downsample final model parameters, cache=TRUE}
+```{r downsample final model parameters, cache=TRUE,warning=FALSE,message=FALSE}
  downsamp_parm_plot<-extract_fit_parsnip(downsamp_final)%>%
    tidy(conf.int=TRUE,exponentiate=TRUE)%>%
    filter(p.value<.05&!term=="(Intercept)")%>%
@@ -1046,7 +1048,7 @@ downsamp_final<-insurance_wf%>%
 ```
 
 This plot shows the model coefficient estimates for the best fitting downsample logistic regression model.
-Only coefficients with a p-value less than .05 are included. The verticle black line indicates
+Only coefficients with a p-value less than .05 are included. The vertical black line indicates
 an odds ratio of 1 meaning the predictor is not informative. Unfortunately the actual values of the 
 Region code and policy sales channel parameters were kept anonymous so I am unable to determine
 the specific sales method or region in which customers reside. The reference level for the policy sales
@@ -1069,9 +1071,8 @@ in purchasing new car insurance is 2.5 times higher than a customer in region 2.
 impact on whether a customer wants to purchase new car insurance. Customers with vehicles older than 1 year 
 old have greater odds of purchasing new car insurance than customers with vehicles less than 1 year old.
 Gender and annual premium have a comparatively negligible impact on the odds of a customer 
-deciding to purchse new car insurance.
+deciding to purchase new car insurance.
 
-# Conclusion
 
 ```{r fit data to test data set,warning=FALSE,message=FALSE,echo=FALSE} 
 Response_pred<-predict(downsamp_final,new_data=test)%>%
