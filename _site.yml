@@ -5,8 +5,10 @@
     left:
     - text: "Navigation"
       href: index.html
+    - text: "README"
+      href: README.html
     - text: "Insurance Modelling"
       href: Insurance-Modelling.html
   output:
     html_document:
-      theme: cosmo
+      theme: united
