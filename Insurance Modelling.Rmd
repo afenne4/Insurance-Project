@@ -1,5 +1,5 @@
 ---
-title: "insurance analysis"
+title: "Insurance Analysis"
 author: "Alex Fennell"
 output: 
   html_document:
@@ -10,12 +10,25 @@ output:
     highlight: tango  
 ---
 # Synopsis
-
+This dataset contains information from a collection of customers of a particular
+insurance agency. The customers currently have health insurance and I am interested in
+whether the variables in the current data set can be used to predict whether a customer
+is interested in expanding their insurance coverage to include their vehicle. The variable
+*Response* indicates whether a customer is interested in expanding their coverage ("Yes")
+or not ("No"). After data processing and exploratory data analysis, I compared three models,
+a logistic regression, a penalized logistic regression and a random forest model. These
+models had similar performance and failed to correctly predict that a customer was interested in
+expanding their coverage. This is because the outcome variable, *Response*, is imbalanced.
+To address this I implemented 3 sampling techniques, upsampling, downsampling, and smote sampling,
+within a logistic regression. This offered significant improvements and a viable model.
+The most important factors in influencing a customers decision to expand their insurance covereage
+were whether they had been in a car accident recently, whether they already had car insurance,
+their age, and various selling strategies. This model offers insight into customer decision making
+and can help influence business decisions.
 
 ```{r libraries, message=FALSE,warning=FALSE,echo=FALSE}
 library(tidyverse)
 library(tidymodels)
-library(psych)
 library(plotly)
 library(gridExtra)
 library(doParallel)
@@ -235,7 +248,7 @@ have various pros and cons associated with them.
     + Requires hyperparameter tuning that takes additional time
     + Lack of model interpretability
   
-# Data Preparation
+## Data Preparation
 To prepare the data for modelling I first update the role of the ID variable so that it 
 is included in the dataset but is not used in the modelling. Then I use step other to clump together 
 categories in factors that have few observations (less than 1% of the data). This will help reduce
