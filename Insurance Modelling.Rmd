@@ -633,7 +633,36 @@ will make it easier to implement business decisions based on the model.
 To address the class imbalance I will be using 3 sampling techniques. I will briefly
 describe how each of these methods works.
 
-1. Upsampling:
+1. Upsampling: This is a sampling technique in which cases from the minority class are sampled with replacement
+   and added to the data set to create a more balanced ratio of the outcome variable classes.
+    + In step_upsample, the parameter *over_ratio* controls the ratio of majority to minority
+      class frequencies. A ratio of 1 indicates the minority class has the same number of observations
+      as the majority class. A ratio of 2 would indicate the minority has twice as many observations as
+      the majority class
+      
+2. Downsampling: This is a sampling technique in which cases from the majority class are removed at random
+   to create a balanced ratio of the outcome variable classes.
+    + In step_downsample, the parameter *under_ratio* controls the ratio of majority to minority class
+      frequencies. A ratio of 1 indicates majority class observations are removed until it has the 
+      same frequency as the minority class. A ratio of 2 indicates the majority class observations are
+      removed until they have at most twice the number of observations as the minority class.
+      
+3. Synthetic Minority Oversampling Technique (SMOTE): This is a type of upsampling in which novel
+   observations are generated from the minority class using k nearest neighbors. 
+   The overall SMOTE algorithm works as follows:
+      a. For each observation in the minority class, the k nearest neighbors will be calculated
+         using a distance metric (e.g. Euclidean distance)
+      b. A subset of these k nearest neighbors are sampled based on the *over_ratio*
+      c. The distance between the observation and the selected nearest neighbor is calculated
+      d. This distance is multiplied by a random number between 0 and 1
+      e. The result of this multiplication is then added to the original observation to create a new observation
+    The step_smote has two parameters *over_ratio* and *neighbors*. *Neighbors* refers to
+    the number of neighbors in the k nearest neighbors part of the algorithm and *over_ratio* is
+    the same previously described.
+      
+The main disadvantage of downsampling is that possibly important data is being thrown away,
+while with upsampling overfitting becomes more likely. SMOTE is a way to deal with the overfitting
+issue as the synthetic values are not the exact same values.
 
 ## Add in sampling steps to recipes
 
@@ -655,6 +684,7 @@ smote_rec<-insurance_recipe%>%
 
 ## Creating sampling tuning grids
 
+I am doing a parameter search among a reasonable set of ranges at increments of 0.1.
 ```{r create sampling tuning grids}
 upsamp_grid<-grid_regular(over_ratio()%>%range_set(c(.5,1.5)),
                           levels=11)
@@ -748,7 +778,7 @@ smote_lr_fit<-readRDS("smote_model.RDS")
 # Model Evaluation
 
 ## Upsample Model
-
+These plots are the same as those presented earlier for the previous model fits.
 ```{r upsample plot}
 upsamp_lr_fit %>%
   collect_metrics() %>%
