@@ -793,6 +793,11 @@ upsamp_lr_fit %>%
 
 ```
 
+This plot shows that the best ROC and F1-score performance occurs when the over_ratio
+parameter is equal to 0.5. As the Over_ratio increases to 1.0, sensitivity, AUC, and F1-score decrease while
+specificity increases. With the over_ratio at 0.5, sensitivity and specificity are balanced
+and is a significant improvement over the previous methods. 
+
 ## Downsample Model
 ```{r downsample plot}
 downsamp_lr_fit %>%
@@ -807,6 +812,9 @@ downsamp_lr_fit %>%
   theme(plot.title=element_text(hjust=.5))
 ```
 
+This plot shows the opposite pattern as the upsample model. In this plot, F1-score,
+AUC, and sensitivity increase and the specificity decreases as the *under_ratio* parameter
+increases. An *under_ratio* value of 1.5 seems to offer the best model performance.
 ## Smote Model
 ```{r smote plot}
 smote_lr_fit %>%
@@ -821,6 +829,11 @@ smote_lr_fit %>%
        color="Neighbors Parameter \nValues")+
   theme(plot.title=element_text(hjust=.5))
 ```
+
+This plot shows a similar trend as the upsample model with sensitivity, AUC, and F1-score decreasing and
+specificity increasing as a function of increasing *over_ratio* values. The value of
+*neighbors* has a minimal effect on model performance with 2 neighbors offering the best
+AUC value across all over_ratio parameter values.
 
 
 ```{r selecting best models}
@@ -844,7 +857,7 @@ smote_pred<-
     collect_predictions(parameters=smote_best)
 ```
 
-## Confusion Matrices
+## Confusion Matrices for 
 ```{r Sample Confusion Matrices}
 cm_upsamp<-upsamp_pred%>%
     conf_mat(Response,.pred_class)%>%
@@ -910,7 +923,7 @@ smote_curve<-smote_val_fit%>%
 
 ```{r ROC curve all sample models}
   bind_rows(up_curve,down_curve,smote_curve)%>%
-  ggplot(aes(x = 1 - specificity, y = sensitivity, col = model)) + 
+  ggplot(aes(x = 1 - specificity, y = sensitivity, col = model, lty=model)) + 
   geom_path(lwd = 1, alpha = 0.8) +
   geom_abline(lty = 3) + 
   coord_equal() + 
