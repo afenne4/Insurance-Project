@@ -857,7 +857,7 @@ smote_pred<-
     collect_predictions(parameters=smote_best)
 ```
 
-## Confusion Matrices for 
+## Confusion Matrices for sampling methods models
 ```{r Sample Confusion Matrices}
 cm_upsamp<-upsamp_pred%>%
     conf_mat(Response,.pred_class)%>%
@@ -929,6 +929,39 @@ smote_curve<-smote_val_fit%>%
   coord_equal() + 
   scale_color_viridis_d(option = "plasma", end = .6)
 ```
+##Confusion matrices based on best decision cutoff
+
+```{r}
+# This finds the most balanced decision threshold by maximizing the true positive rate (specificity) minus # the false positive rate (1-sensitivity)
+up_curve_cut<- up_curve$.threshold[which.max(sqrt(up_curve$sensitivity^2-(up_curve$specificity)^2))]
+down_curve_cut<- down_curve$.threshold[which.max(down_curve$sensitivity-(1-down_curve$specificity))]
+smote_curve_cut<- smote_curve$.threshold[which.max(smote_curve$sensitivity-(1-smote_curve$specificity))]
+
+
+cm_upsamp<-upsamp_pred%>%
+    mutate(predclass=ifelse(upsamp_pred$.pred_No>up_curve_cut,"No","Yes"))%>%
+    mutate(predclass=factor(predclass))%>%
+    conf_mat(Response,predclass)%>%
+    autoplot(type='heatmap')+
+    ggtitle("Best Upsample")
+cm_downsamp<-downsamp_pred%>%
+    mutate(predclass=ifelse(downsamp_pred$.pred_No>down_curve_cut,"No","Yes"))%>%
+    mutate(predclass=factor(predclass))%>%
+    conf_mat(Response,predclass)%>%
+    autoplot(type='heatmap')+
+    ggtitle("Best Downsample")
+cm_smote<-smote_pred%>%
+    mutate(predclass=ifelse(smote_pred$.pred_No>smote_curve_cut,"No","Yes"))%>%
+    mutate(predclass=factor(predclass))%>%
+    conf_mat(Response,predclass)%>%
+    autoplot(type='heatmap')+
+    ggtitle("Best Smote")
+    
+grid.arrange(cm_upsamp,cm_downsamp,cm_smote,ncol=3,heights=c(1,1))
+
+```
+
+
 
 # Final Model Fit
 ```{r downsample model final fit}
