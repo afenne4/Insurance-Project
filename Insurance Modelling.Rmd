@@ -2,12 +2,8 @@
 title: "Insurance Analysis"
 author: "Alex Fennell"
 output: 
-  html_document:
-    toc: true 
-    toc_depth: 2  
-    number_sections: true  
-    theme: united  
-    highlight: tango  
+  rmdformats::readthedown
+    highlight: tango 
 ---
 # Synopsis
 This dataset contains information from a collection of customers of a particular
@@ -421,7 +417,9 @@ lr_fit_train<- insurance_wf%>%
                       accuracy,
                       roc_auc),
                   control = control_resamples(save_pred = TRUE))
+```
 
+```{r, eval=FALSE,echo=FALSE}
 saveRDS(lr_fit_train,"lr_basicfit.rds")
 ```
 
@@ -437,8 +435,10 @@ lr_pen_fit<-insurance_wf%>%
                       accuracy,
                       roc_auc),
                   control=control_grid(save_pred=TRUE))
-saveRDS(lr_pen_fit,"lr_pen_fit.rds")
+```
 
+```{r,eval=FALSE,echo=FALSE}
+saveRDS(lr_pen_fit,"lr_pen_fit.rds")
 ```
 
 ```{r read in Ridge/Lasso Regression Model,echo=FALSE}
@@ -501,6 +501,8 @@ RF_fit<-insurance_wf%>%
                       roc_auc),
                   control=control_grid(save_pred = TRUE)
               )
+```
+```{r,echo=FALSE,eval=FALSE}
 saveRDS(RF_fit,"RF_mod_Grid.rds")
 
 ```
