@@ -2,7 +2,7 @@
 title: "Insurance Analysis"
 author: "Alex Fennell"
 output: 
-  rmdformats::readthedown
+  rmdformats::readthedown:
     highlight: tango 
 ---
 # Synopsis
