@@ -539,7 +539,7 @@ show_best(RF_fit,metric="roc_auc")
 
 
 # Model comparison
-For the model I examine the confusion matrices and the ROC curve.
+For the model comparison, I examine the confusion matrices and the ROC curve.
 
 ```{r collect data for confusion matrices}
 lr_pred<-
@@ -761,6 +761,7 @@ stopCluster(c1)
 saveRDS(downsamp_lr_fit,"downsamp_model.RDS")
 ```
 
+
 ## Smote model fit
 
 ```{r smote model fit,eval=FALSE}
@@ -830,6 +831,7 @@ downsamp_lr_fit %>%
 This plot shows the opposite pattern as the upsample model. In this plot, F1-score,
 AUC, and sensitivity increase and the specificity decreases as the *under_ratio* parameter
 increases. An *under_ratio* value of 1.5 seems to offer the best model performance.
+
 ## Smote Model
 
 ```{r smote plot}
